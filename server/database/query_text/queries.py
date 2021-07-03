@@ -98,54 +98,54 @@ USERS_DETAIL_LIST_VIEW_WEEK_MONTH = "" \
 QUERY_GET_OBJECTS = f"select id, name, b1.'name:1' " \
             f"best_post, max(rank) best_rank, " \
             f"(select b2.'name:1' " \
-            f"from main.temporary_view b2 where b2.rank = " \
-            f"(select min(rank) from main.temporary_view b2 where b1.name = b2.name)) " \
+            f"from public.temporary_view b2 where b2.rank = " \
+            f"(select min(rank) from public.temporary_view b2 where b1.name = b2.name)) " \
             f"as bad_post, (select min(rank) " \
-            f"from main.temporary_view b2 where b1.name = b2.name) bad_rank, " \
+            f"from public.temporary_view b2 where b1.name = b2.name) bad_rank, " \
             f"SUM(time_bypasses) times, SUM(count_bypass) " \
-            f"count, AVG(rank) avg_rank from main.temporary_view b1 group by name;"
+            f"count, AVG(rank) avg_rank from public.temporary_view b1 group by name;"
 
 QUERY_GET_POSTS = f"SELECT id, name, b1.'name:1' post_name, " \
-            f"(select `name:2` from main.temporary_view b3 where b3.rank = (" \
-            f"select max(rank) from main.temporary_view b2 " \
+            f"(select `name:2` from public.temporary_view b3 where b3.rank = (" \
+            f"select max(rank) from public.temporary_view b2 " \
             f"where b1.'name:1' = b2.'name:1')) as " \
             f"best_component_name, MAX(rank) best_rank_component, " \
-            f"(select b2.'name:2' from main.temporary_view b2 where b2.rank = " \
-            f"(select min(rank) bad_component_rank from main.temporary_view b2 " \
+            f"(select b2.'name:2' from public.temporary_view b2 where b2.rank = " \
+            f"(select min(rank) bad_component_rank from public.temporary_view b2 " \
             f"where b1.'name:1' = b2.'name:1')) bad_component_name, " \
-            f"(select min(rank) bad_component_rank from main.temporary_view b2 " \
+            f"(select min(rank) bad_component_rank from public.temporary_view b2 " \
             f"where b1.'name:1' = b2.'name:1') bad_component_rank, " \
             f"max(time_bypasses) as times, max(count_bypass) as count, AVG(rank) avg_rank, " \
-            f"(select count(distinct user.id) from main.bypass bypass " \
-            f"left join main.user user on bypass.user_id = user.id " \
-            f"left join main.post post on bypass.post_id = post.id " \
+            f"(select count(distinct user.id) from public.bypass bypass " \
+            f"left join public.user user on bypass.user_id = user.id " \
+            f"left join public.post post on bypass.post_id = post.id " \
             f"where post.name is not null and bypass.start_time > %d " \
             f"and post.name = b1.'name:1') count_users " \
-            f"FROM main.temporary_view b1 " \
+            f"FROM public.temporary_view b1 " \
             f"WHERE b1.name = %s "\
             f"GROUP BY post_name;"
 
 QUERY_GET_USERS = "select surname, name as username, lastname, `name:1` " \
     "as object_name, `name:2` as post_name, (select `name:3` " \
-    "from main.temporary_view b1 " \
+    "from public.temporary_view b1 " \
     "where b1.rank = (select max(rank) " \
-    "from main.temporary_view b2 " \
+    "from public.temporary_view b2 " \
     "where b2.name = b3.name and b2.`name:2` = {0}) and b1.`name:2` = {0}) as max_component_name, " \
     "max(rank) as max_component_rank, " \
-    "(select `name:3` from main.temporary_view b1 " \
+    "(select `name:3` from public.temporary_view b1 " \
     "where b1.rank = " \
-    "(select min(rank) from main.temporary_view b2 " \
+    "(select min(rank) from public.temporary_view b2 " \
     "where b2.name = b3.name and b2.`name:2` = {0}) and b1.`name:2` = {0}) as bad_component_name, " \
-    "(select min(rank) from main.temporary_view b1 " \
+    "(select min(rank) from public.temporary_view b1 " \
     "where b1.name = b3.name and b1.`name:2` = {0}) as bad_component_rank, " \
     "avg(rank), max(DISTINCT count_bypass) as count_bypass, sum(DISTINCT time_bypasses) as time_bypasses, email " \
-    "from main.temporary_view b3 " \
+    "from public.temporary_view b3 " \
     "where post_name like {0} group by username;"
 
 QUERY_GET_USERS_DETAIL = 'select id, user_id, start_time, end_time, weather, ' \
                          'temperature, cleaner, `id:3`, component_id, `name:2`, ' \
                          '`description:1`, component_rank_id, rank, `name:3`, email, `name:1`, icon, surname, name, lastname ' \
-                         'from main.temporary_view_detail;'
+                         'from public.temporary_view_detail;'
 
 QUERY_GET_USERS_DETAIL_WEEK_MONTH = 'select id, user_id, start_time, end_time, weather, ' \
                                     'temperature, cleaner, `id:8`, ' \
@@ -153,7 +153,7 @@ QUERY_GET_USERS_DETAIL_WEEK_MONTH = 'select id, user_id, start_time, end_time, w
                                     'component_rank_id, avg_ranked, `name:3`, ' \
                                     'email, `name:1`, icon, surname, name, ' \
                                     'lastname, times, count_bypass, avg_temperature, ' \
-                                    'avg_icon, time_length from main.temporary_view_detail;'
+                                    'avg_icon, time_length from public.temporary_view_detail;'
 
 TODAY_MILLISECONDS = 86400000
 WEEK_MILLISECONDS = 604800000

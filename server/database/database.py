@@ -1,6 +1,6 @@
 import time
-
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, \
+import psycopg2
+from sqlalchemy import Column, BigInteger, Integer, String, Text, ForeignKey, \
     create_engine, Table, MetaData, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -23,7 +23,7 @@ class MainDataBase:
 
         """
         __tablename__ = 'user'
-        id = Column(Integer, primary_key=True)
+        id = Column(BigInteger, primary_key=True)
         surname = Column(String)
         name = Column(String, nullable=False)
         lastname = Column(String)
@@ -72,8 +72,8 @@ class MainDataBase:
 
         """
         __tablename__ = 'active_user'
-        id = Column(Integer, primary_key=True, autoincrement=True)
-        user_id = Column(String, ForeignKey('user.id'))
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        user_id = Column(BigInteger, ForeignKey('user.id'))
         ip = Column(Text)
         port = Column(Integer)
         time_conn = Column(Text)
@@ -91,8 +91,8 @@ class MainDataBase:
 
         """
         __tablename__ = 'login_history'
-        id = Column(Integer, primary_key=True, autoincrement=True)
-        user_id = Column(String, ForeignKey('user.id'))
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        user_id = Column(BigInteger, ForeignKey('user.id'))
         ip = Column(Text)
         port = Column(Integer)
         last_conn = Column(Text)
@@ -109,7 +109,7 @@ class MainDataBase:
         """
         __tablename__ = 'step_time'
         id = Column(Integer, primary_key=True, autoincrement=True)
-        user_id = Column(Integer, ForeignKey('user.id'))
+        user_id = Column(BigInteger, ForeignKey('user.id'))
         count_step = Column(Integer)
         date_time = Column(Text, nullable=False)
         current_time = Column(Text, nullable=False)
@@ -125,9 +125,9 @@ class MainDataBase:
 
         """
         __tablename__ = 'bypass'
-        id = Column(Integer, primary_key=True)
-        user_id = Column(Integer, ForeignKey('user.id'))
-        post_id = Column(Integer, ForeignKey('post.id'))
+        id = Column(BigInteger, primary_key=True)
+        user_id = Column(BigInteger, ForeignKey('user.id'))
+        post_id = Column(BigInteger, ForeignKey('post.id'))
         start_time = Column(Text)
         end_time = Column(Text)
         avg_rank = Column(Text)
@@ -158,10 +158,10 @@ class MainDataBase:
 
         """
         __tablename__ = 'bypass_rank'
-        id = Column(Integer, primary_key=True)
-        bypass_id = Column(Integer, ForeignKey('bypass.id'))
-        component_id = Column(Integer, ForeignKey('component.id'))
-        component_rank_id = Column(Integer, ForeignKey('component_rank.id'))
+        id = Column(BigInteger, primary_key=True)
+        bypass_id = Column(BigInteger, ForeignKey('bypass.id'))
+        component_id = Column(BigInteger, ForeignKey('component.id'))
+        component_rank_id = Column(BigInteger, ForeignKey('component_rank.id'))
         start_time = Column(Text)
         end_time = Column(Text)
         photo_rank_gallery = relationship('PhotoRankGallery',
@@ -180,8 +180,8 @@ class MainDataBase:
 
         """
         __tablename__ = 'photo_rank_gallery'
-        id = Column(Integer, primary_key=True)
-        bypass_rank_id = Column(Integer, ForeignKey('bypass_rank.id'))
+        id = Column(BigInteger, primary_key=True)
+        bypass_rank_id = Column(BigInteger, ForeignKey('bypass_rank.id'))
         image = Column(Text)
 
         def __init__(self, id, bypass_rank_id, image):
@@ -194,7 +194,7 @@ class MainDataBase:
 
         """
         __tablename__ = 'building'
-        id = Column(Integer, primary_key=True)
+        id = Column(BigInteger, primary_key=True)
         name = Column(String, nullable=False, unique=True)
         address = Column(String)
         description = Column(String)
@@ -213,8 +213,8 @@ class MainDataBase:
 
         """
         __tablename__ = 'post'
-        id = Column(Integer, primary_key=True)
-        building_id = Column(Integer, ForeignKey('building.id'))
+        id = Column(BigInteger, primary_key=True)
+        building_id = Column(BigInteger, ForeignKey('building.id'))
         name = Column(String, nullable=False, unique=True)
         description = Column(String)
         image = Column(Text)
@@ -236,9 +236,9 @@ class MainDataBase:
 
     class ComponentWithPost(Base):
         __tablename__ = 'component_with_post'
-        id = Column(Integer, primary_key=True)
-        post_id = Column(Integer, ForeignKey('post.id'))
-        component_id = Column(Integer, ForeignKey('component.id'))
+        id = Column(BigInteger, primary_key=True)
+        post_id = Column(BigInteger, ForeignKey('post.id'))
+        component_id = Column(BigInteger, ForeignKey('component.id'))
 
         def __int__(self, id, post_id, component_id):
             self.id = id
@@ -250,7 +250,7 @@ class MainDataBase:
 
         """
         __tablename__ = 'component'
-        id = Column(Integer, primary_key=True)
+        id = Column(BigInteger, primary_key=True)
         name = Column(String, nullable=False, unique=True)
         description = Column(String)
         image = Column(Text, nullable=False)
@@ -271,8 +271,8 @@ class MainDataBase:
 
         """
         __tablename__ = 'component_rank'
-        id = Column(Integer, primary_key=True)
-        component_id = Column(Integer, ForeignKey('component.id'))
+        id = Column(BigInteger, primary_key=True)
+        component_id = Column(BigInteger, ForeignKey('component.id'))
         name = Column(String, nullable=False)
         rank = Column(Text, nullable=False)
         image = Column(Text, nullable=False)
@@ -288,8 +288,8 @@ class MainDataBase:
 
     class PushNotification(Base):
         __tablename__ = 'push_notification'
-        id = Column(Integer, primary_key=True)
-        user_id = Column(Integer, ForeignKey('user.id'))
+        id = Column(BigInteger, primary_key=True)
+        user_id = Column(BigInteger, ForeignKey('user.id'))
         push_token = Column(Text, nullable=False)
         
         def __init__(self, user_id, push_token):
@@ -298,8 +298,8 @@ class MainDataBase:
 
     class UserShift(Base):
         __tablename__ = 'user_shift'
-        id = Column(Integer, primary_key=True, autoincrement=True)
-        user_id = Column(Integer, ForeignKey('user.id'))
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        user_id = Column(BigInteger, ForeignKey('user.id'))
         start_shift = Column(Text, nullable=False)
         create_date = Column(Text, nullable=False)
 
@@ -309,8 +309,7 @@ class MainDataBase:
             self.create_date = int(time() * 1000)
 
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'sqlite:///{path}', pool_recycle=7200,
-                                    connect_args={'check_same_thread': False})
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.16:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
@@ -365,7 +364,7 @@ class MainDataBase:
         if user_active_from_id:
             user_active_from_id.user_id = user_id
         else:
-            active_user_row = self.ActiveUser(user_id, ip, port, time_conn, id_ws_handler)
+            active_user_row = self.ActiveUser(int(user_id), ip, port, time_conn, id_ws_handler)
             self.session.add(active_user_row)
         self.session.commit()
     
