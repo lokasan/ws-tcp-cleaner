@@ -1,5 +1,4 @@
 unit_test
-.gitignore
 .idea/
 __pycache__/
 client/client.log
