@@ -6,7 +6,8 @@ import os
 import shutil
 import sys
 import time
-
+import ssl
+from send_mail.modules.SMTPClient import SMTPClient
 import websockets
 
 from JIM.config import *
@@ -24,6 +25,7 @@ class Server:
         self.clients = []
         self.database = MainDataBase()
         self.path_img = ''
+        self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.address = listen_address
         self.port = listen_port
         self.running = True
@@ -103,6 +105,10 @@ class Server:
         elif ACTION in request and request[ACTION] == 'GET_USER_SHIFT':
             response = request
         elif ACTION in request and request[ACTION] == 'USER_LOGOUT':
+            response = request
+        elif ACTION in request and request[ACTION] == 'CHECK_AUTHENTICATION':
+            response = request
+        elif ACTION in request and request[ACTION] == 'UPDATE_EMPLOEE_PRIVILEG':
             response = request
         else:
             response = {RESPONSE: ERROR}
@@ -236,11 +242,14 @@ class Server:
 
     async def unregister(self, websocket) -> None:
         user = self.database.user_critical_logout(str(id(websocket)))
-        # print(dir(user_id['user_id']), 'user_id')
+        print(user, 'PRINTED')
+        print(user.__dict__, 'PRINTED')
         self.clients.remove(websocket)
         for client in self.clients:
             await send_msg(client, await self.process_client_message(
                 {ACTION: 'REMOVE_ACTIVE_USER', MESSAGE: getattr(user, 'user_id', None)}))
+
+
 
         await self.notify_user('отключился')
 
@@ -281,6 +290,7 @@ class Server:
                     self.path_img = self.get_full_path(request)
                     is_user_exists = self.database.get_user(request[EMAIL])
                     print(is_user_exists, ' Base')
+                    print(request, 'user_request')
                     if not is_user_exists:
                         self.database.create_user(request['ID'],
                                                   request[SURNAME],
@@ -296,10 +306,10 @@ class Server:
                                                   request['START_SHIFT'])
                         self.create_image_file(request['PATH'])
 
-                    await send_msg(websocket,
-                                   await self.process_client_message(
-                                       {ACTION: GET_USER_IN_LOCAL_BASE,
-                                        MESSAGE: is_user_exists if is_user_exists else request}))
+                    # await send_msg(websocket,
+                    #                await self.process_client_message(
+                    #                    {ACTION: GET_USER_IN_LOCAL_BASE,
+                    #                     MESSAGE: is_user_exists if is_user_exists else request}))
                     log.info(request)
 
                 elif ACTION in request and request[ACTION] == ADD_OBJECT:
@@ -478,16 +488,19 @@ class Server:
                     #                             updated_elements=[])
 
                 elif ACTION in request and request[ACTION] == REMOVE_POST:
+                    building_id = self.database.get_building_id_of_post_id(
+                        request[POST_ID])
                     path = self.database.remove_post(request[POST_ID])
                     shutil.rmtree(path.rsplit(os.sep, 1)[0])
                     remove_element = list()
                     remove_element.append({'id': request[POST_ID]})
                     print(remove_element)
                     # posts = self.database.get_posts(request[BUILDING_ID])
+
                     # await self.refresh_elements(GET_POSTS_SYNCHRONIZE,
                     #                             added_elements=[],
                     #                             removed_elements=remove_element,
-                    #                             target_id=request[BUILDING_ID],
+                    #                             target_id=building_id,
                     #                             updated_elements=[])
 
                 elif ACTION in request and request[ACTION] == REMOVE_OBJECT:
@@ -503,7 +516,11 @@ class Server:
                     #                             updated_elements=[])
 
                 elif ACTION in request and request[ACTION] == REMOVE_EMPLOEE:
-                    self.database.remove_user(request[USER_ID])
+                    path = self.database.remove_user(request[USER_ID])
+                    print(path, 'REMOVE_EMPLOEE')
+                    remove_element = list()
+                    remove_element.append({'id': request[USER_ID]})
+                    shutil.rmtree(path.rsplit(os.sep, 1)[0])
 
                 elif ACTION in request and request[ACTION] == CREATE_BYPASS:
                     self.database.create_bypass(request['ID'],
@@ -775,8 +792,14 @@ class Server:
                 #         {ACTION: MESSAGE, MESSAGE: 'hi'}))
                 elif ACTION in request and request[ACTION] == 'UPDATE_EMPLOEE_PRIVILEG':
                     print(request['EMPLOEE']['privileg'])
+                    update_privileg = {
+                        'privileg': request['EMPLOEE']['privileg'],
+                        'id': request['EMPLOEE']['id'],
+                    }
                     self.database.update_emploee_privileg(request['EMPLOEE']['privileg'],
                                                           request['EMPLOEE']['id'])
+                    await self.refresh_elements_no_content('UPDATE_EMPLOEE_PRIVILEG',
+                                                           update_privileg)
                 elif ACTION in request and request[ACTION] == 'CREATE_USER_SHIFT':
                     print(request)
                     user = self.database.get_user_shift(request['USER_ID'])
@@ -792,7 +815,7 @@ class Server:
                     user_shift = self.database.get_user_shift(request['USER_ID'])
                     print(user_shift)
                     await self.refresh_elements_no_content('GET_USER_SHIFT',
-                                                           user_shift)
+                                                           user_shift if user_shift else {'user_id': request['USER_ID'], 'start_shift': int(time.time() * 1000)})
                 elif ACTION in request and request[ACTION] == 'USER_LOGOUT':
                     user_log = self.database.user_logout(request['EMAIL'], str(id(websocket)))
 
@@ -800,6 +823,36 @@ class Server:
                         print(user_log, 'user_log')
                         await self.refresh_elements_no_content('USER_LOGOUT',
                                                                user_log['data'])
+                elif ACTION in request and request[ACTION] == 'CHECK_AUTHENTICATION':
+                    user = self.database.get_user_for_authentication(request[EMAIL], request['PASSWORD'])
+                    print(user, 'AUTHENTICATE')
+                    email = getattr(user, 'email', None)
+                    ids = getattr(user, 'id', None)
+                    await self.refresh_elements_no_content('CHECK_AUTHENTICATION',
+                                                           {
+                                                               'email': email,
+                                                               'id': ids,
+                                                           })
+                elif ACTION in request and request[ACTION] == 'SEND_MESSAGE_TO_MAIL':
+                    emails = [request[EMAIL]]
+                    my_text = "<html>" \
+                              "<head></head>" \
+                              "<body>" \
+                              "<p><b>{0} {1} {2}</b>, Вас зарегистрировали в приложении NSClean</p>" \
+                              "<p>Ваши авторизационные данные:<br>" \
+                              "Логин: <b>{3}</b><br>" \
+                              "Пароль: <b>{4}</b><br>"\
+                              "Время начала обходов: <b>{5}</b>"\
+                              "</p>" \
+                              "</body>" \
+                              "</html>"
+                    SMTP = SMTPClient('nsclean@neweducations.online', '290590120nN')
+                    SMTP.send_message(
+                        'Успешная регистрация в приложении NSClean',
+                        my_text.format(request[SURNAME], request[NAME], request[LASTNAME],
+                                       request[EMAIL], request['PASSWORD'], request['START_SHIFT']),
+                        emails)
+
         finally:
             await self.unregister(websocket)
 

@@ -41,6 +41,8 @@ class MainDataBase:
                                    backref='user')
         login_history = relationship('LoginHistory', cascade="all,delete",
                                      backref='user')
+        user_shift = relationship('UserShift', cascade="all,delete",
+                                     backref='user')
         last_conn = Column(Text)
         passwd_hash = Column(String)
         pubkey = Column(Text)
@@ -309,7 +311,7 @@ class MainDataBase:
             self.create_date = int(time() * 1000)
 
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.16:5480/postgres', pool_recycle=7200)
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.6:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
@@ -373,8 +375,10 @@ class MainDataBase:
             id_ws=id_ws_handler).first()
         print('user', user)
 
-        self.session.query(self.ActiveUser).filter_by(id_ws=id_ws_handler).delete()
+        user_exit = self.session.query(self.ActiveUser).filter_by(id_ws=id_ws_handler).first()
+        self.session.delete(user_exit)
         self.session.commit()
+
         return user
 
     def user_logout(self, email: str, id_ws: str) -> dict:
@@ -390,7 +394,7 @@ class MainDataBase:
             user_count = len(user_active_many)
             
         user_row = self.session.query(self.ActiveUser).filter_by(user_id=user.id, id_ws=id_ws).first()
-        user_id = user_row.user_id
+        user_id = getattr(user_row, 'user_id', None)
         user_row.user_id = None
 
         self.session.commit()
@@ -520,9 +524,10 @@ class MainDataBase:
         :param email:
         :return: None
         """
-        user = self.session.query(self.User).filter_by(id=user_id)
-        user.delete()
+        user = self.session.query(self.User).filter_by(id=user_id).first()
+        self.session.delete(user)
         self.session.commit()
+        return user.image
 
     def get_user(self, email: str) -> dict:
         """
@@ -546,7 +551,12 @@ class MainDataBase:
                 'create_user_date': user.create_user_date
             }
         return user
-
+    
+    def get_user_for_authentication(self, login, password):
+        user = self.session.query(self.User).filter_by(email=login,
+                                                       passwd_hash=password).first()
+        return user
+        
     def get_users(self) -> list:
         """
 
@@ -643,7 +653,11 @@ class MainDataBase:
         self.session.delete(post)
         self.session.commit()
         return post.image
-
+    
+    def get_building_id_of_post_id(self, id):
+        post = self.session.query(self.Post).filter_by(id=id).first()
+        return post.building_id
+    
     def get_posts(self, building_id) -> list:
         """
 
