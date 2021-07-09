@@ -311,7 +311,7 @@ class MainDataBase:
             self.create_date = int(time() * 1000)
 
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.6:5480/postgres', pool_recycle=7200)
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.8:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
@@ -1225,7 +1225,7 @@ class MainDataBase:
                     'email': qrt[idx][14]
                 }
                 id_temp = qrt[idx][0]
-            if id_temp != qrt[idx][0] and id_temp or (len(qrt) - 1 == idx):
+            if (id_temp != qrt[idx][0] and id_temp) or (len(qrt) - 1 == idx):
                 print('id_temp not equal bypass_id and not id_temp')
                 temp_list.append(my_dicts)
                 my_dicts = {
@@ -1246,6 +1246,8 @@ class MainDataBase:
                     'email': qrt[idx][14]
                 }
                 print(my_dicts)
+                if idx == len(qrt) - 1 and qrt[idx][0] != qrt[idx - 1][0]:
+                    temp_list.append(my_dicts)
             id_temp = qrt[idx][0]
 
         return temp_list
@@ -1268,12 +1270,12 @@ class MainDataBase:
             'bestComponentRank': self._to_fixed(el[6], 1),
             'badComponent': el[7],
             'badComponentRank': self._to_fixed(el[8], 1),
-            'countTime': el[11],
-            'countBypass': el[10],
-            'avgRanks': self._to_fixed(el[9], 1),
+            'countTime': int(el[12]),
+            'countBypass': el[11],
+            'avgRanks': self._to_fixed(el[10], 1),
             'steps': '-',
             'trand': 1,
-            'email': el[12],
+            'email': el[13],
             'post_name': el[4]
         }
             for el in qrt]
@@ -1301,13 +1303,15 @@ class MainDataBase:
         :param object_name:
         :return:
         """
-        qrt = self.create_and_remove_view_and_get_list(is_time,
-                                                       POSTS_LIST_VIEW,
-                                                       QUERY_GET_POSTS %
-                                                       (round(
-                                                           time() * 1000) -
-                                                        is_time,
-                                                        f"'{object_name}'"))
+        qrt = self.create_remove_view_detail(POSTS_LIST_VIEW.format(round(
+                                                               time() * 1000) -
+                                                            is_time),
+                                                       QUERY_GET_POSTS.format(
+                                                           round(
+                                                               time() * 1000) -
+                                                            is_time, 
+                                                            f"'{object_name}'"))
+                                                       
         print([el for el in qrt])
         return [{
             'id': str(time() + random.randint(1, 15000)),

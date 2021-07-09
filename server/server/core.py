@@ -729,6 +729,7 @@ class Server:
                     print(request[PERIOD], ' - PERIOD')
                     status_object = self.database.get_status_object(
                         request[PERIOD])
+                    print(status_object, 'STATUS_OBJ')
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        {ACTION: GET_BYPASS_STATUS_OBJECT,
@@ -737,6 +738,7 @@ class Server:
                         GET_BYPASS_STATUS_POSTS:
                     status_posts = self.database.get_status_posts(
                         request['OBJECT_NAME'], request[PERIOD])
+                    print(status_posts, 'INFO-FOR-POSTS')
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        {ACTION: GET_BYPASS_STATUS_POSTS,
@@ -748,6 +750,7 @@ class Server:
                         GET_BYPASS_STATUS_USERS:
                     status_users = self.database.get_status_users(
                         request['POST_NAME'], request[PERIOD])
+                    print(status_users, 'USERS_STATUS')
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        {ACTION: GET_BYPASS_STATUS_USERS,
