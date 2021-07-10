@@ -110,6 +110,8 @@ class Server:
             response = request
         elif ACTION in request and request[ACTION] == 'UPDATE_EMPLOEE_PRIVILEG':
             response = request
+        elif ACTION in request and request[ACTION] == 'GET_BYPASS_STATUS_OBJECT_DETAIL':
+            response = request
         else:
             response = {RESPONSE: ERROR}
             log.error(request)
@@ -556,6 +558,7 @@ class Server:
 
                 elif ACTION in request and request[ACTION] == \
                         CLEANER_ON_BYPASS:
+                    print('MY_CLEAN', request)
                     self.database.is_cleaner_on_bypass(
                         request[CLEANER_ON_BYPASS], request[BYPASS_ID])
                     # await send_msg(websocket, \
@@ -734,6 +737,19 @@ class Server:
                                    await self.process_client_message(
                                        {ACTION: GET_BYPASS_STATUS_OBJECT,
                                         MESSAGE: status_object}))
+                elif ACTION in request and request[ACTION] == \
+                    'GET_BYPASS_STATUS_OBJECT_DETAIL':
+                    status_object_detail = self.database.get_status_object_detail(
+                        request[PERIOD],
+                        request['OBJECT_NAME']
+
+                    )
+
+                    print(status_object_detail, 'STATUS_OBJ-detail')
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       {ACTION: 'GET_BYPASS_STATUS_OBJECT_DETAIL',
+                                        MESSAGE: status_object_detail}))
                 elif ACTION in request and request[ACTION] == \
                         GET_BYPASS_STATUS_POSTS:
                     status_posts = self.database.get_status_posts(

@@ -97,6 +97,15 @@ USERS_DETAIL_LIST_VIEW_WEEK_MONTH = "" \
     "and bypass.end_time < {3} " \
     "and times = testing.timeses group by times, c.name;"
 
+OBJECT_DETAIL_LIST_VIEW = "select bypass.id bypass_id, bypass.user_id user_id, bypass.post_id post_id, bypass.start_time start_time, bypass.end_time end_time, bypass.weather weather, bypass.temperature temperature, bypass.cleaner cleaner, bypass.icon icon, u.surname surname, u.name as first_name, u.lastname lastname, u.email email, p.name post_name, b.name building_name, cr.rank " \
+ 	"from bypass " \
+ 	"left join public.user u on bypass.user_id = u.id "\
+ 	"left join post p on p.id = bypass.post_id "\
+ 	"left join building b on b.id = p.building_id "\
+ 	"left join bypass_rank br on br.bypass_id = bypass.id "\
+ 	"left join component_rank cr on cr.id = br.component_rank_id "\
+ 	"where b.name = {1} and bypass.finished = 1 and bypass.end_time::bigint > {0};"
+
 QUERY_GET_OBJECTS = f'select (select id from public.temporary_view limit 1) as id, build_name, (select b5.post_name ' \
 f'from public.temporary_view b5 ' \
 f'where b5.rank = ' \
@@ -182,6 +191,10 @@ QUERY_GET_USERS_DETAIL_WEEK_MONTH = 'select id, user_id, start_time, end_time, w
                                     'email, `name:1`, icon, surname, name, ' \
                                     'lastname, times, count_bypass, avg_temperature, ' \
                                     'avg_icon, time_length from public.temporary_view_detail;'
+
+QUERY_OBJECT_DETAIL_LIST = "select building_name, post_name, surname, first_name, lastname, email, weather, avg(temperature::integer) temperature, cleaner, icon,  avg(temporary_view_detail.rank::decimal) avg_rank, start_time, end_time "\
+                             "from temporary_view_detail "\
+                             "group by  bypass_id, weather, cleaner, icon, surname, first_name, lastname, email, post_name, building_name, start_time, end_time;"
 
 TODAY_MILLISECONDS = 86400000
 WEEK_MILLISECONDS = 604800000

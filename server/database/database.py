@@ -908,6 +908,7 @@ class MainDataBase:
         """
         bypass = self.session.query(self.Bypass).filter_by(id=id).first()
         bypass.cleaner = cleaner
+        print(bypass.cleaner, 'bypass_is database')
         self.session.commit()
 
     def update_bypass(self, avg_rank, id) -> None:
@@ -1265,7 +1266,7 @@ class MainDataBase:
         print([el for el in qrt])
         return [{
             'id': str(time() + random.randint(1, 18000)),
-            'title': f'{el[0]} {el[1]}',
+            'title': f'{el[0]} {el[1]} {el[2]}',
             'bestComponent': el[5],
             'bestComponentRank': self._to_fixed(el[6], 1),
             'badComponent': el[7],
@@ -1369,9 +1370,43 @@ class MainDataBase:
         if period == 'year':
             return self.get_list_objects(YEAR_MILLISECONDS)
 
+    def get_list_objects_detail(self, is_time, object_name):
+        qrt = self.create_remove_view_detail(OBJECT_DETAIL_LIST_VIEW.format(
+            round(time() * 1000) - is_time, f"'{object_name}'"),
+            QUERY_OBJECT_DETAIL_LIST)
+        return [{
+            'id': str(time() + random.randint(1, 15000)),
+            'object_name': el[0],
+            'post_name': el[1],
+            'surname': el[2],
+            'first_name': el[3],
+            'lastname': el[4],
+            'email': el[5],
+            'weather': el[6],
+            'temperature': int(el[7]),
+            'cleaner': el[8],
+            'icon': el[9],
+            'avg_rank': float(el[10]),
+            'start_time': int(el[11]),
+            'end_time': int(el[12])
+        }
+            for el in qrt]
+
+    def get_status_object_detail(self, period, object_name):
+        if period == 'today':
+            return self.get_list_objects_detail(TODAY_MILLISECONDS, object_name)
+        if period == 'week':
+            return self.get_list_objects_detail(WEEK_MILLISECONDS, object_name)
+        if period == 'month':
+            return self.get_list_objects_detail(MONTH_MILLISECONDS, object_name)
+        if period == 'year':
+            return self.get_list_objects_detail(YEAR_MILLISECONDS, object_name)
+
 
 if __name__ == '__main__':
     server = MainDataBase()
+    test = server.is_cleaner_on_bypass('1', 1625934870036)
+    print(test)
     # server.create_component('Обои', 'ktkt', 'C://ppgd')
     # server.create_component('Кресла', 'ktkt', 'C://ppgd')
     # server.create_component('Витрины', 'ktkt', 'C://ppgd')
