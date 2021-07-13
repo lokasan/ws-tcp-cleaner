@@ -7,6 +7,7 @@ import shutil
 import sys
 import time
 import ssl
+import aiofiles
 from send_mail.modules.SMTPClient import SMTPClient
 import websockets
 
@@ -118,11 +119,11 @@ class Server:
 
         return response
 
-    def create_image_file(self, file):
+    async def create_image_file(self, file):
         if not os.path.exists(self.path_img.rsplit(os.sep, 1)[0]):
             os.makedirs(self.path_img.rsplit(os.sep, 1)[0])
-        with open(self.path_img, 'wb') as f:
-            f.write(base64.b64decode(file[23:].encode('utf-8')))
+        async with aiofiles.open(self.path_img, 'wb') as f:
+            await f.write(base64.b64decode(file[23:].encode('utf-8')))
 
     async def refresh_elements_no_content(self, action, elements):
         for ws in self.clients:
@@ -216,6 +217,13 @@ class Server:
     def configurate_path_img(msg) -> str:
         return f"{msg[ACTION].split('_', 1)[1].lower()}{os.sep}{msg[NAME]}" \
             f"{os.sep}{msg[NAME_FILE]}"
+
+    @staticmethod
+    def get_bypass_path(bypass_id, bypass_rank_id, file_name):
+        return os.path.join(os.path.normpath(
+            os.path.dirname(os.path.abspath(
+                __file__)) + os.sep + os.pardir),
+            f'images{os.sep}' + 'bypass' + os.sep + str(bypass_id) + os.sep + 'bypass_rank' + os.sep + str(bypass_rank_id) + os.sep + str(file_name) + '.jpeg')
 
     def get_full_path(self, request):
         return os.path.join(os.path.normpath(
@@ -871,6 +879,20 @@ class Server:
                         my_text.format(request[SURNAME], request[NAME], request[LASTNAME],
                                        request[EMAIL], request['PASSWORD'], request['START_SHIFT']),
                         emails)
+                elif ACTION in request and request[ACTION] == 'EDIT_BYPASSRANK_AND_IMAGE':
+                    print(len(request['PATH']), 'len of path')
+                    try:
+                        for el in request['PATH']:
+                            self.path_img = self.get_bypass_path(request['BYPASS_ID'], request['BYPASS_RANK_ID'], el['id'])
+                            await self.create_image_file(el['image'])
+                            self.database.create_photo_rank_gallery(el['id'], request['BYPASS_RANK_ID'], self.path_img)
+                        self.database.update_bypass_rank(
+                        request[COMPONENT_RANK_ID], request[BYPASS_RANK_ID],
+                        request[END_TIME])
+                    except:
+                        pass
+
+
 
         finally:
             await self.unregister(websocket)

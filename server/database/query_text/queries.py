@@ -37,6 +37,17 @@ USERS_LIST_VIEW = f"select p.id post_id, u.surname, u.name, " \
     f"WHERE b.finished=1 and b.end_time::bigint > %d " \
     f"GROUP BY u.id, p.id, c.id, b.id, building_name;"
 
+POSTS_DETAIL_LIST_VIEW = "select b.id bypass_id, b2.name building_name, p.id post_id, p.name post_name, u.id user_id, u.surname surname, u.name first_name, u.lastname lastname, u.email, u.start_shift, weather, temperature, cleaner, icon, "\
+"c.name component_name, c.description description, br.id bypass_rank_id, cr.rank component_rank, cr.name component_rank_name, b.start_time, b.end_time "\
+"from bypass b "\
+"left join post p on p.id = b.post_id "\
+"left join building b2 on b2.id = p.building_id "\
+"left join \"user\" u on  u.id = b.user_id "\
+"left join bypass_rank br on br.bypass_id = b.id "\
+"left join component_rank cr on cr.id = br.component_rank_id "\
+"left join component c on c.id = br.component_id "\
+"where p.name = {0} and b.end_time::bigint > {1} and b.end_time::bigint < {2};"
+
 USERS_DETAIL_LIST_VIEW = "select bypass.id bypass_id, bypass.user_id user_id, bypass.start_time bypass_start_time, bypass.end_time bypass_end_time, bypass.weather bypass_weather, bypass.temperature bypass_temperature, bypass.cleaner bypass_cleaner, br.id bypass_rank_id, br.component_id bypass_rank_component_id, c.name component_name, c.description component_description, br.component_rank_id bypass_rank_component_rank_id, cr.rank component_rank_rank, cr.name component_rank_name, u.email user_email, p.name post_name, bypass.icon bypass_icon, u.surname user_surname, u.name user_name, u.lastname user_lastaname " \
                          "from bypass " \
                          "left join public.user u on bypass.user_id = u.id " \
@@ -195,7 +206,7 @@ QUERY_GET_USERS_DETAIL_WEEK_MONTH = 'select id, user_id, start_time, end_time, w
 QUERY_OBJECT_DETAIL_LIST = "select building_name, post_name, surname, first_name, lastname, email, weather, avg(temperature::integer) temperature, cleaner, icon,  avg(temporary_view_detail.rank::decimal) avg_rank, start_time, end_time "\
                              "from temporary_view_detail "\
                              "group by  bypass_id, weather, cleaner, icon, surname, first_name, lastname, email, post_name, building_name, start_time, end_time;"
-
+QUERY_POSTS_DETAIL_LIST = "select bypass_id, building_name, post_id, post_name, user_id, surname, first_name, lastname, email, start_shift, weather, temperature, cleaner, icon, component_name, description, bypass_rank_id, component_rank, component_rank_name, start_time, end_time from temporary_view_detail;"
 TODAY_MILLISECONDS = 86400000
 WEEK_MILLISECONDS = 604800000
 MONTH_MILLISECONDS = 2678400000

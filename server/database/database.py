@@ -311,7 +311,7 @@ class MainDataBase:
             self.create_date = int(time() * 1000)
 
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.8:5480/postgres', pool_recycle=7200)
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.5:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
@@ -1066,6 +1066,106 @@ class MainDataBase:
         self.engine.execute(view_drop())
         return qrt
 
+    def get_status_posts_detail(self, post_name, period):
+        if period == 'today':
+            return self.get_list_posts_detail(
+                round(time() * 1000 - TODAY_MILLISECONDS),
+                round(time() * 1000),
+                post_name,
+                QUERY_POSTS_DETAIL_LIST
+            )
+
+        if period == 'week':
+            return self.get_list_posts_detail(
+                round(time() * 1000 - WEEK_MILLISECONDS),
+                round(time() * 1000),
+                post_name,
+                QUERY_POSTS_DETAIL_LIST)
+        if period == 'month':
+            self.get_list_posts_detail(
+                round(time() * 1000 - MONTH_MILLISECONDS),
+                round(time() * 1000),
+                post_name,
+                QUERY_POSTS_DETAIL_LIST
+            )
+            return self.get_list_posts_detail(
+                round(time() * 1000 - MONTH_MILLISECONDS),
+                round(time() * 1000),
+                post_name,
+                QUERY_POSTS_DETAIL_LIST
+            )
+        if period == 'year':
+            return self.get_list_posts_detail(
+                round(time() * 1000 - YEAR_MILLISECONDS),
+                round(time() * 1000),
+                post_name,
+                QUERY_GET_USERS_DETAIL
+            )
+
+    def get_list_posts_detail(self, start_time, end_time, post_name,  query):
+        qrt = self.create_remove_view_detail(POSTS_DETAIL_LIST_VIEW.
+                                             format(post_name, start_time, end_time),
+                                             query)
+        print(f'{post_name} post_name')
+        id_temp = 0
+        temp_list = []
+        my_dicts = []
+        print(f'{qrt} - This')
+        for idx in range(len(qrt)):
+            if id_temp == qrt[idx][0]:
+                print('id_temp equal bypass_id')
+                my_dicts[str(qrt[idx][16])] = qrt[idx][14]
+                my_dicts[str(qrt[idx][16]) + '_rank'] = qrt[idx][17]
+                my_dicts[str(qrt[idx][16]) + '_description'] = qrt[idx][15]
+                my_dicts[str(qrt[idx][16]) + '_name_c_r'] = qrt[idx][18]
+                print(my_dicts, 'my_dicts')
+            if not id_temp:
+                print('no id_temp')
+                my_dicts = {
+                    'bypass_id': qrt[idx][0],
+                    'user_id': qrt[idx][4],
+                    'start_time': qrt[idx][19],
+                    'end_time': qrt[idx][20],
+                    'weather': qrt[idx][10],
+                    'temperature': qrt[idx][11],
+                    'cleaner': qrt[idx][12],
+                    str(qrt[idx][16]): qrt[idx][14],
+                    str(qrt[idx][16]) + '_rank': qrt[idx][17],
+                    str(qrt[idx][16]) + '_description': qrt[idx][15],
+                    str(qrt[idx][16]) + '_name_c_r': qrt[idx][18],
+                    'post_name': qrt[idx][3],
+                    'icon': qrt[idx][13],
+                    'title': f'{qrt[idx][5]} {qrt[idx][6]} {qrt[idx][7]}',
+                    'email': qrt[idx][8]
+                }
+                id_temp = qrt[idx][0]
+            if (id_temp != qrt[idx][0] and id_temp) or (len(qrt) - 1 == idx):
+                print('id_temp not equal bypass_id and not id_temp')
+                temp_list.append(my_dicts)
+                my_dicts = {
+                    'bypass_id': qrt[idx][0],
+                    'user_id': qrt[idx][4],
+                    'start_time': qrt[idx][19],
+                    'end_time': qrt[idx][20],
+                    'weather': qrt[idx][10],
+                    'temperature': qrt[idx][11],
+                    'cleaner': qrt[idx][12],
+                    str(qrt[idx][16]): qrt[idx][14],
+                    str(qrt[idx][16]) + '_rank': qrt[idx][17],
+                    str(qrt[idx][16]) + '_description': qrt[idx][15],
+                    str(qrt[idx][16]) + '_name_c_r': qrt[idx][18],
+                    'post_name': qrt[idx][3],
+                    'icon': qrt[idx][13],
+                    'title': f'{qrt[idx][5]} {qrt[idx][6]} {qrt[idx][7]}',
+                    'email': qrt[idx][8]
+                }
+                print(my_dicts)
+                if idx == len(qrt) - 1 and qrt[idx][0] != qrt[idx - 1][0]:
+                    temp_list.append(my_dicts)
+            id_temp = qrt[idx][0]
+
+        return temp_list
+
     def get_status_users(self, post_name, period) -> list:
         """
 
@@ -1405,8 +1505,12 @@ class MainDataBase:
 
 if __name__ == '__main__':
     server = MainDataBase()
-    test = server.is_cleaner_on_bypass('1', 1625934870036)
-    print(test)
+    # test = server.is_cleaner_on_bypass('1', 1625934870036)
+    # print(test)
+    test = server.get_status_posts_detail(f"'мясной ряд'", 'week')
+    import json
+    print(json.dumps(test, indent=4, ensure_ascii=False))
+
     # server.create_component('Обои', 'ktkt', 'C://ppgd')
     # server.create_component('Кресла', 'ktkt', 'C://ppgd')
     # server.create_component('Витрины', 'ktkt', 'C://ppgd')
