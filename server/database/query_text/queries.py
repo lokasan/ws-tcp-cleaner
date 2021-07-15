@@ -48,7 +48,7 @@ POSTS_DETAIL_LIST_VIEW = "select b.id bypass_id, b2.name building_name, p.id pos
 "left join component c on c.id = br.component_id "\
 "where p.name = {0} and b.end_time::bigint > {1} and b.end_time::bigint < {2};"
 
-USERS_DETAIL_LIST_VIEW = "select bypass.id bypass_id, bypass.user_id user_id, bypass.start_time bypass_start_time, bypass.end_time bypass_end_time, bypass.weather bypass_weather, bypass.temperature bypass_temperature, bypass.cleaner bypass_cleaner, br.id bypass_rank_id, br.component_id bypass_rank_component_id, c.name component_name, c.description component_description, br.component_rank_id bypass_rank_component_rank_id, cr.rank component_rank_rank, cr.name component_rank_name, u.email user_email, p.name post_name, bypass.icon bypass_icon, u.surname user_surname, u.name user_name, u.lastname user_lastaname " \
+USERS_DETAIL_LIST_VIEW = "select bypass.id bypass_id, bypass.user_id user_id, bypass.start_time bypass_start_time, bypass.end_time bypass_end_time, bypass.weather bypass_weather, bypass.temperature bypass_temperature, bypass.cleaner bypass_cleaner, br.id bypass_rank_id, br.component_id bypass_rank_component_id, c.name component_name, c.description component_description, br.component_rank_id bypass_rank_component_rank_id, cr.rank component_rank_rank, cr.name component_rank_name, u.email user_email, p.name post_name, bypass.icon bypass_icon, u.surname user_surname, u.name user_name, u.lastname user_lastaname, br.is_image " \
                          "from bypass " \
                          "left join public.user u on bypass.user_id = u.id " \
                          "left join post p on bypass.post_id = p.id " \
@@ -192,7 +192,7 @@ QUERY_GET_USERS = "select surname, name as username, lastname, building_name " \
                   "like {0} group by email, surname, " \
                   "name, lastname, building_name, post_name;"
 
-QUERY_GET_USERS_DETAIL = 'select  bypass_id, user_id, bypass_start_time, bypass_end_time, bypass_weather, bypass_temperature, bypass_cleaner, bypass_rank_id, bypass_rank_component_id, component_name, component_description, bypass_rank_component_rank_id, component_rank_rank, component_rank_name, user_email, post_name, bypass_icon, user_surname, user_name, user_lastaname ' \
+QUERY_GET_USERS_DETAIL = 'select  bypass_id, user_id, bypass_start_time, bypass_end_time, bypass_weather, bypass_temperature, bypass_cleaner, bypass_rank_id, bypass_rank_component_id, component_name, component_description, bypass_rank_component_rank_id, component_rank_rank, component_rank_name, user_email, post_name, bypass_icon, user_surname, user_name, user_lastaname, is_image ' \
                          'from public.temporary_view_detail;'
 
 QUERY_GET_USERS_DETAIL_WEEK_MONTH = 'select id, user_id, start_time, end_time, weather, ' \

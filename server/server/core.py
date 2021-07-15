@@ -113,6 +113,8 @@ class Server:
             response = request
         elif ACTION in request and request[ACTION] == 'GET_BYPASS_STATUS_OBJECT_DETAIL':
             response = request
+        elif ACTION in request and request[ACTION] =='GET_IMAGE_FOR_BYPASS':
+            response = request
         else:
             response = {RESPONSE: ERROR}
             log.error(request)
@@ -887,10 +889,21 @@ class Server:
                             await self.create_image_file(el['image'])
                             self.database.create_photo_rank_gallery(el['id'], request['BYPASS_RANK_ID'], self.path_img)
                         self.database.update_bypass_rank(
-                        request[COMPONENT_RANK_ID], request[BYPASS_RANK_ID],
-                        request[END_TIME])
+                            request[COMPONENT_RANK_ID], request[BYPASS_RANK_ID],
+                            request[END_TIME], True)
                     except:
                         pass
+                elif ACTION in request and request['ACTION'] == 'GET_IMAGE_FOR_BYPASS':
+                    images = self.database.get_photo_rank_gallery(request[BYPASS_RANK_ID])
+                    photo_dict = {
+                        'ACTION': 'GET_IMAGE_FOR_BYPASS',
+                        'BYPASS_RANK_ID': request[BYPASS_RANK_ID],
+                        'CONTENT': self.get_content_list(images)
+                    }
+                    print(photo_dict)
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       photo_dict))
 
 
 

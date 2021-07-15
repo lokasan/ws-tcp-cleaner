@@ -1,6 +1,6 @@
 import time
 import psycopg2
-from sqlalchemy import Column, BigInteger, Integer, String, Text, ForeignKey, \
+from sqlalchemy import Column, BigInteger, Boolean, Integer, String, Text, ForeignKey, \
     create_engine, Table, MetaData, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
@@ -166,16 +166,18 @@ class MainDataBase:
         component_rank_id = Column(BigInteger, ForeignKey('component_rank.id'))
         start_time = Column(Text)
         end_time = Column(Text)
+        is_image = Column(Boolean)
         photo_rank_gallery = relationship('PhotoRankGallery',
                                           cascade="all,delete",
                                           backref='bypass_rank')
-
+        
         def __init__(self, id, bypass_id, component_id, start_time):
             self.id = id
             self.bypass_id = bypass_id
             self.component_id = component_id
             self.start_time = start_time
             self.end_time = None
+            self.is_image = None
 
     class PhotoRankGallery(Base):
         """
@@ -311,7 +313,7 @@ class MainDataBase:
             self.create_date = int(time() * 1000)
 
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.5:5480/postgres', pool_recycle=7200)
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.9:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
@@ -1001,7 +1003,7 @@ class MainDataBase:
         user.privileg = privileg
         self.session.commit()
 
-    def update_bypass_rank(self, component_rank_id, id, end_time) -> None:
+    def update_bypass_rank(self, component_rank_id, id, end_time, is_image=False) -> None:
         """
 
         :param component_rank_id:
@@ -1012,8 +1014,17 @@ class MainDataBase:
             id=id).first()
         bypass_rank.component_rank_id = component_rank_id
         bypass_rank.end_time = end_time
+        bypass_rank.is_image = is_image
         self.session.commit()
-
+    
+    def get_photo_rank_gallery(self, bypass_rank_id):
+        images_list = self.session.query(self.PhotoRankGallery).filter_by(bypass_rank_id=bypass_rank_id).all()
+        return [{
+            'bypass_rank_id': bypass_rank_id,
+            'image': el.image
+        } for el in images_list] 
+        
+    
     def create_photo_rank_gallery(self, id, bypass_rank_id, image) -> None:
         """
 
@@ -1305,6 +1316,7 @@ class MainDataBase:
                 my_dicts[str(qrt[idx][7]) + '_rank'] = qrt[idx][12]
                 my_dicts[str(qrt[idx][7]) + '_description'] = qrt[idx][10]
                 my_dicts[str(qrt[idx][7]) + '_name_c_r'] = qrt[idx][13]
+                my_dicts[str(qrt[idx][7]) + '_is_image'] = qrt[idx][20]
                 print(my_dicts, 'my_dicts')
             if not id_temp:
                 print('no id_temp')
@@ -1320,6 +1332,7 @@ class MainDataBase:
                     str(qrt[idx][7]) + '_rank': qrt[idx][12],
                     str(qrt[idx][7]) + '_description': qrt[idx][10],
                     str(qrt[idx][7]) + '_name_c_r': qrt[idx][13],
+                    str(qrt[idx][7]) + '_is_image': qrt[idx][20],
                     'post_name': qrt[idx][15],
                     'icon': qrt[idx][16],
                     'title': f'{qrt[idx][17]} {qrt[idx][18]} {qrt[idx][19]}',
@@ -1341,10 +1354,12 @@ class MainDataBase:
                     str(qrt[idx][7]) + '_rank': qrt[idx][12],
                     str(qrt[idx][7]) + '_description': qrt[idx][10],
                     str(qrt[idx][7]) + '_name_c_r': qrt[idx][13],
+                    str(qrt[idx][7]) + '_is_image': qrt[idx][20],
                     'post_name': qrt[idx][15],
                     'icon': qrt[idx][16],
                     'title': f'{qrt[idx][17]} {qrt[idx][18]} {qrt[idx][19]}',
-                    'email': qrt[idx][14]
+                    'email': qrt[idx][14],
+                    'is_image': qrt[idx][20]
                 }
                 print(my_dicts)
                 if idx == len(qrt) - 1 and qrt[idx][0] != qrt[idx - 1][0]:
