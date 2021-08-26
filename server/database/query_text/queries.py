@@ -8,7 +8,7 @@ OBJECTS_LIST_VIEW = f'select (select id from bypass limit 1), building.name as b
         f'on br.component_rank_id = cr.id '\
         f'left join component c on br.component_id = c.id '\
         f'left join public.user u on u.id = b.user_id '\
-        f'WHERE b.finished=1 and b.end_time::bigint > %s '\
+        f'WHERE b.finished=1 and b.end_time::bigint >= %s '\
         f'GROUP BY p.id, build_name;'
 
 POSTS_LIST_VIEW = 'select (select bypass.id from bypass limit 1) ident, building.name  building_name, p.name as post_name, c.name as component_name, AVG(cr.rank::decimal) rank, '\
@@ -150,8 +150,8 @@ QUERY_GET_POSTS = "SELECT (select ident from public.temporary_view_detail limit 
             "(select count(distinct public.user.id) from public.bypass bypass " \
             "left join public.user on bypass.user_id = public.user.id " \
             "left join public.post post on bypass.post_id = post.id " \
-            "where post.name is not null and bypass.start_time::bigint > {0} " \
-            "and post.name = b1.post_name) count_users " \
+            "where post.name is not null and bypass.end_time::bigint > {0} " \
+            "and post.name = b1.post_name and bypass.finished=1) count_users " \
             "FROM public.temporary_view_detail b1 " \
             "WHERE b1.building_name = {1} "\
             "GROUP BY post_name;"
@@ -207,7 +207,91 @@ QUERY_OBJECT_DETAIL_LIST = "select building_name, post_name, surname, first_name
                              "from temporary_view_detail "\
                              "group by  bypass_id, weather, cleaner, icon, surname, first_name, lastname, email, post_name, building_name, start_time, end_time;"
 QUERY_POSTS_DETAIL_LIST = "select bypass_id, building_name, post_id, post_name, user_id, surname, first_name, lastname, email, start_shift, weather, temperature, cleaner, icon, component_name, description, bypass_rank_id, component_rank, component_rank_name, start_time, end_time from temporary_view_detail;"
-TODAY_MILLISECONDS = 86400000
+
+QUERY_STAT_SINGLE_PERSON = "select u.id, round(avg(cr.rank::numeric), 2), " \
+                          "count(distinct b.id), min(cnt_bp.cnt) from " \
+                          "(select \"user\".id user_id, post.id post_id, " \
+                          "count(b.id) as cnt from post left join " \
+                          "(bypass b inner join \"user\" on \"user\".id " \
+                          "= b.user_id) on b.post_id = post.id " \
+                          "and b.end_time::bigint >= {1} " \
+                          "and \"user\".id = {0} " \
+                          "GROUP by post.id, \"user\".id) as cnt_bp, " \
+                          "bypass_rank br left join bypass b on b.id " \
+                          "= br.bypass_id and b.finished = 1 " \
+                          "and b.end_time::bigint >= {1} " \
+                          "left join \"user\" u  on b.user_id = u.id " \
+                          "left join component_rank cr on cr.id " \
+                          "= br.component_rank_id " \
+                          "where u.id = {0} group by u.id;"
+
+QUERY_GET_BASE_STATIC_BY_USER = '''
+with 
+	cnt_by_bypasses as (
+		SELECT 
+			"user".id AS user_id, 
+			post.id AS post_id, 
+			COUNT(*) AS cnt 
+		FROM 
+			post 
+		LEFT JOIN 
+			(bypass b 
+				inner JOIN 
+					"user" 
+				ON 
+					"user".id = b.user_id
+			) 
+		ON 
+			b.post_id = post.id 
+		AND 
+			b.end_time::BIGINT >= {1}
+		AND
+		    b.end_time::BIGINT <= {2}
+		GROUP BY 
+			post.id, "user".id
+	order by user_id
+	),
+	user_and_bypass as (
+		select "user".id user_id, post.id post_id
+		from "user", post 
+		order by "user".id
+	)
+	
+SELECT 
+	u.id, 
+	round(avg(cr.rank::numeric), 2) AS avg_rank, 
+	COUNT(DISTINCT b.id) count_bypass, 
+	MIN(cnt_bp.cnt) as "cycle", 
+	SUM(b.end_time::BIGINT - b.start_time::BIGINT) AS time_bypass
+FROM 
+	(select uab.user_id, uab.post_id, coalesce(cnt, 0) as cnt from user_and_bypass uab full join cnt_by_bypasses cbb on uab.user_id = cbb.user_id and uab.post_id = cbb.post_id) AS cnt_bp, 
+		bypass_rank br
+LEFT JOIN 
+	bypass b 
+ON 
+	b.id = br.bypass_id 
+AND 
+	b.finished = 1 
+AND 
+	b.end_time::BIGINT >= {1}
+AND 
+    b.end_time::BIGINT <= {2}
+LEFT JOIN 
+	"user" u 
+ON 
+	b.user_id = u.id 
+LEFT JOIN 
+	component_rank cr 
+ON 
+	cr.id = br.component_rank_id 
+where cnt_bp.user_id = u.id{0}
+GROUP BY 
+	u.id;
+'''
+
+from time import time
+STATIC_DAY = int(time() * 1000) % 86400000
+TODAY_MILLISECONDS = 0
 WEEK_MILLISECONDS = 604800000
 MONTH_MILLISECONDS = 2678400000
 YEAR_MILLISECONDS = 31536000000

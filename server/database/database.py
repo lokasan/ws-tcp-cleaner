@@ -11,9 +11,8 @@ from time import time
 import random
 from server.database.query_text.queries import *
 from server.database.query_text.view import view_create, view_drop, view_create_detail, view_drop_detail
-
+from server.utilities.helper_functions.get_today import get_today
 STOP_BYPASS = 3600
-
 
 class MainDataBase:
     Base = declarative_base()
@@ -313,7 +312,7 @@ class MainDataBase:
             self.create_date = int(time() * 1000)
 
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.9:5480/postgres', pool_recycle=7200)
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.7:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
@@ -359,10 +358,23 @@ class MainDataBase:
         return user.pubkey
 
     def get_active_users(self):
+        """
+        
+        :return: 
+        """
         active_users_row = self.session.query(self.ActiveUser).all()
         return [getattr(user, 'user_id', 0) for user in active_users_row]
 
-    def user_login(self, user_id, ip, port, time_conn, id_ws_handler):
+    def user_login(self, user_id, ip, port, time_conn, id_ws_handler) -> None:
+        """
+        
+        :param user_id: 
+        :param ip: 
+        :param port: 
+        :param time_conn: 
+        :param id_ws_handler: 
+        :return: 
+        """
         user_active_from_id = self.session.query(self.ActiveUser).filter_by(id_ws=id_ws_handler).first()
         print(user_active_from_id)
         if user_active_from_id:
@@ -372,7 +384,12 @@ class MainDataBase:
             self.session.add(active_user_row)
         self.session.commit()
     
-    def user_critical_logout(self, id_ws_handler):
+    def user_critical_logout(self, id_ws_handler) -> None:
+        """
+        
+        :param id_ws_handler: 
+        :return: 
+        """
         user = self.session.query(self.ActiveUser).filter_by(
             id_ws=id_ws_handler).first()
         print('user', user)
@@ -485,12 +502,12 @@ class MainDataBase:
         # self.session.add(history_row)
         # self.session.commit()
 
-    def create_user_shift(self, user_id, start_shift):
+    def create_user_shift(self, user_id, start_shift) -> None:
         """
 
         :param user_id:
         :param start_shift:
-        :return:
+        :return: None
         """
         user_sh_raw = self.UserShift(user_id, start_shift)
         user_update_row = self.session.query(self.User).filter_by(id=user_id).first()
@@ -498,7 +515,13 @@ class MainDataBase:
         self.session.add(user_sh_raw)
         self.session.commit()
 
-    def update_user_shift(self, user_id, start_shift):
+    def update_user_shift(self, user_id, start_shift) -> None:
+        """
+        
+        :param user_id: 
+        :param start_shift: 
+        :return: None
+        """
         user_shift = self.session.query(self.UserShift)\
             .filter_by(user_id=user_id)\
             .order_by(desc(self.UserShift.id))\
@@ -509,7 +532,12 @@ class MainDataBase:
         user_update_row.start_shift = start_shift
         self.session.commit()
 
-    def get_user_shift(self, user_id):
+    def get_user_shift(self, user_id) -> dict:
+        """
+        
+        :param user_id: 
+        :return: 
+        """
         user_shift = self.session.query(self.UserShift)\
             .filter_by(user_id=user_id)\
             .order_by(desc(self.UserShift.id)).first()
@@ -555,6 +583,12 @@ class MainDataBase:
         return user
     
     def get_user_for_authentication(self, login, password):
+        """
+        
+        :param login: 
+        :param password: 
+        :return: 
+        """
         user = self.session.query(self.User).filter_by(email=login,
                                                        passwd_hash=password).first()
         return user
@@ -578,7 +612,7 @@ class MainDataBase:
                 'image': element.image,
                 'create_user_date': element.create_user_date,
                 'last_conn': element.last_conn,
-                'start_shift': element.start_shift
+                'start_shift': element.start_shift,
             }
             for element in users.all()]
 
@@ -624,6 +658,11 @@ class MainDataBase:
             for element in buildings.all()]
 
     def get_building_id(self, id):
+        """
+        
+        :param id: 
+        :return: 
+        """
         building = self.session.query(self.Building).filter_by(id=id).first()
         return building
 
@@ -657,6 +696,11 @@ class MainDataBase:
         return post.image
     
     def get_building_id_of_post_id(self, id):
+        """
+        
+        :param id: 
+        :return: 
+        """
         post = self.session.query(self.Post).filter_by(id=id).first()
         return post.building_id
     
@@ -681,6 +725,11 @@ class MainDataBase:
             for el in posts.all()]
     
     def get_user_email(self, email: str) -> int:
+        """
+        
+        :param email: 
+        :return: 
+        """
         user = self.session.query(self.User).filter_by(email=email).first()
         return 1 if isinstance(user, self.User) else 0
     
@@ -870,7 +919,12 @@ class MainDataBase:
         self.session.delete(c_p_l_row)
         self.session.commit()
 
-    def get_component_to_post_links(self, post_id):
+    def get_component_to_post_links(self, post_id) -> list:
+        """
+        
+        :param post_id: 
+        :return: 
+        """
         components = self.session.query(self.Component).join(
             self.ComponentWithPost,
             self.ComponentWithPost.component_id == self.Component.id,
@@ -879,7 +933,7 @@ class MainDataBase:
             {
                 'id': el.id,
                 'name': el.name,
-                'desctiption': el.description,
+                'description': el.description,
                 'image': el.image
             }
             for el in components.all()]
@@ -998,7 +1052,14 @@ class MainDataBase:
         started_components = self.session.query(self.BypassRank).filter_by(
             bypass_id=bypass_id, end_time=None)
         return started_components.all()
-    def update_emploee_privileg(self, privileg, id):
+
+    def update_emploee_privileg(self, privileg, id) -> None:
+        """
+        
+        :param privileg: 
+        :param id: 
+        :return: None
+        """
         user = self.session.query(self.User).filter_by(id=id).first()
         user.privileg = privileg
         self.session.commit()
@@ -1016,15 +1077,29 @@ class MainDataBase:
         bypass_rank.end_time = end_time
         bypass_rank.is_image = is_image
         self.session.commit()
-    
-    def get_photo_rank_gallery(self, bypass_rank_id):
-        images_list = self.session.query(self.PhotoRankGallery).filter_by(bypass_rank_id=bypass_rank_id).all()
+
+    def get_photo_rank_gallery_count(self, bypass_rank_id):
+        """
+        
+        :param bypass_rank_id: 
+        :return: 
+        """
+        return self.session.query(self.PhotoRankGallery).filter_by(bypass_rank_id=bypass_rank_id).count()
+
+    def get_photo_rank_gallery(self, bypass_rank_id, limit, offset) -> list:
+        """
+        
+        :param bypass_rank_id: 
+        :param limit: 
+        :param offset: 
+        :return: 
+        """
+        images_list = self.session.query(self.PhotoRankGallery).filter_by(bypass_rank_id=bypass_rank_id).limit(limit).offset(offset)
         return [{
             'bypass_rank_id': bypass_rank_id,
             'image': el.image
         } for el in images_list] 
-        
-    
+
     def create_photo_rank_gallery(self, id, bypass_rank_id, image) -> None:
         """
 
@@ -1059,11 +1134,33 @@ class MainDataBase:
         return status_bypass.all()
 
     def create_remove_view_detail(self, create_view, query):
+        """
+        
+        :param create_view: 
+        :param query: 
+        :return: 
+        """
         self.engine.execute(view_create_detail(create_view))
         qrt = self.engine.execute(query).all()
         self.engine.execute(view_drop_detail())
         return qrt
-
+    
+    def get_response_for_universal_query(self, user_id):
+        """
+        
+        :param query: 
+        :return: 
+        """
+        user_stat_row = self.engine.execute(QUERY_STAT_SINGLE_PERSON.format(user_id, get_today())).all()
+        return [
+            {
+                'id': el[0],
+                'avg_rank': float(el[1]) if el[1] else 0,
+                'count_bypass': int(el[2]),
+                'cycle_bypass': int(el[3])
+            }
+        for el in user_stat_row]
+    
     def create_and_remove_view_and_get_list(self, is_time, create_view, query):
         """
 
@@ -1078,9 +1175,15 @@ class MainDataBase:
         return qrt
 
     def get_status_posts_detail(self, post_name, period):
+        """
+        
+        :param post_name: 
+        :param period: 
+        :return: 
+        """
         if period == 'today':
             return self.get_list_posts_detail(
-                round(time() * 1000 - TODAY_MILLISECONDS),
+                get_today(),
                 round(time() * 1000),
                 post_name,
                 QUERY_POSTS_DETAIL_LIST
@@ -1088,19 +1191,19 @@ class MainDataBase:
 
         if period == 'week':
             return self.get_list_posts_detail(
-                round(time() * 1000 - WEEK_MILLISECONDS),
+                round(get_today() - WEEK_MILLISECONDS),
                 round(time() * 1000),
                 post_name,
                 QUERY_POSTS_DETAIL_LIST)
         if period == 'month':
             self.get_list_posts_detail(
-                round(time() * 1000 - MONTH_MILLISECONDS),
+                round(get_today() - MONTH_MILLISECONDS),
                 round(time() * 1000),
                 post_name,
                 QUERY_POSTS_DETAIL_LIST
             )
             return self.get_list_posts_detail(
-                round(time() * 1000 - MONTH_MILLISECONDS),
+                round(get_today() - MONTH_MILLISECONDS),
                 round(time() * 1000),
                 post_name,
                 QUERY_POSTS_DETAIL_LIST
@@ -1114,6 +1217,14 @@ class MainDataBase:
             )
 
     def get_list_posts_detail(self, start_time, end_time, post_name,  query):
+        """
+        
+        :param start_time: 
+        :param end_time: 
+        :param post_name: 
+        :param query: 
+        :return: 
+        """
         qrt = self.create_remove_view_detail(POSTS_DETAIL_LIST_VIEW.
                                              format(post_name, start_time, end_time),
                                              query)
@@ -1194,9 +1305,16 @@ class MainDataBase:
             return self.get_list_users(YEAR_MILLISECONDS, post_name)
 
     def get_status_users_detail(self, period, post_name, user_email):
+        """
+        
+        :param period: 
+        :param post_name: 
+        :param user_email: 
+        :return: 
+        """
         if period == 'today':
             return self.get_list_users_detail(
-                round(time() * 1000 - TODAY_MILLISECONDS),
+                round(get_today() - TODAY_MILLISECONDS),
                 round(time() * 1000),
                 post_name,
                 user_email,
@@ -1205,21 +1323,21 @@ class MainDataBase:
 
         if period == 'week':
             return self.get_list_users_detail(
-                round(time() * 1000 - WEEK_MILLISECONDS),
+                round(get_today() - WEEK_MILLISECONDS),
                 round(time() * 1000),
                 post_name,
                 user_email,
                 QUERY_GET_USERS_DETAIL)
         if period == 'month':
-            self.get_list_users_detail_week_month(
-                round(time() * 1000 - MONTH_MILLISECONDS),
-                round(time() * 1000),
-                post_name,
-                user_email,
-                QUERY_GET_USERS_DETAIL_WEEK_MONTH
-            )
+            # self.get_list_users_detail_week_month(
+            #     round(time() * 1000 - MONTH_MILLISECONDS),
+            #     round(time() * 1000),
+            #     post_name,
+            #     user_email,
+            #     QUERY_GET_USERS_DETAIL_WEEK_MONTH
+            # )
             return self.get_list_users_detail(
-                round(time() * 1000 - MONTH_MILLISECONDS),
+                round(get_today() - MONTH_MILLISECONDS),
                 round(time() * 1000),
                 post_name,
                 user_email,
@@ -1227,7 +1345,7 @@ class MainDataBase:
             )
         if period == 'year':
             return self.get_list_users_detail(
-                round(time() * 1000 - YEAR_MILLISECONDS),
+                round(get_today() - YEAR_MILLISECONDS),
                 round(time() * 1000),
                 post_name,
                 user_email,
@@ -1236,6 +1354,15 @@ class MainDataBase:
 
     def get_list_users_detail_week_month(self, start_time, end_time, post_name,
                                          user_email, query):
+        """
+        
+        :param start_time: 
+        :param end_time: 
+        :param post_name: 
+        :param user_email: 
+        :param query: 
+        :return: 
+        """
 
         qrt = self.engine.execute(USERS_DETAIL_LIST_VIEW_WEEK_MONTH.
                                   format(post_name, user_email,
@@ -1300,6 +1427,15 @@ class MainDataBase:
         return temp_list
 
     def get_list_users_detail(self, start_time, end_time, post_name, user_email, query):
+        """
+        
+        :param start_time: 
+        :param end_time: 
+        :param post_name: 
+        :param user_email: 
+        :param query: 
+        :return: 
+        """
         qrt = self.create_remove_view_detail(USERS_DETAIL_LIST_VIEW.
                                              format(post_name, user_email,
                                                     start_time, end_time),
@@ -1419,12 +1555,10 @@ class MainDataBase:
         :param object_name:
         :return:
         """
-        qrt = self.create_remove_view_detail(POSTS_LIST_VIEW.format(round(
-                                                               time() * 1000) -
+        qrt = self.create_remove_view_detail(POSTS_LIST_VIEW.format(get_today() -
                                                             is_time),
                                                        QUERY_GET_POSTS.format(
-                                                           round(
-                                                               time() * 1000) -
+                                                           get_today() -
                                                             is_time, 
                                                             f"'{object_name}'"))
                                                        
@@ -1486,8 +1620,14 @@ class MainDataBase:
             return self.get_list_objects(YEAR_MILLISECONDS)
 
     def get_list_objects_detail(self, is_time, object_name):
+        """
+        
+        :param is_time: 
+        :param object_name: 
+        :return: 
+        """
         qrt = self.create_remove_view_detail(OBJECT_DETAIL_LIST_VIEW.format(
-            round(time() * 1000) - is_time, f"'{object_name}'"),
+            round(get_today()) - is_time, f"'{object_name}'"),
             QUERY_OBJECT_DETAIL_LIST)
         return [{
             'id': str(time() + random.randint(1, 15000)),
@@ -1508,6 +1648,12 @@ class MainDataBase:
             for el in qrt]
 
     def get_status_object_detail(self, period, object_name):
+        """
+        
+        :param period: 
+        :param object_name: 
+        :return: 
+        """
         if period == 'today':
             return self.get_list_objects_detail(TODAY_MILLISECONDS, object_name)
         if period == 'week':
@@ -1517,12 +1663,41 @@ class MainDataBase:
         if period == 'year':
             return self.get_list_objects_detail(YEAR_MILLISECONDS, object_name)
 
+    def get_list_user_basic(self, user, start_time, end_time) -> list:
+        """
+
+        :param user:
+        :param start_time:
+        :param end_time:
+        :return: list
+        """
+        user_str = f' and u.id={user}' if user else ''
+        start_time_str = start_time if start_time else get_today()
+        end_time_str = end_time if end_time else get_today() + 86400000
+        qrt = self.engine.execute(
+            QUERY_GET_BASE_STATIC_BY_USER.format(user_str,
+                                                 start_time_str,
+                                                 end_time_str))
+        return [
+            {
+                'user_id': el.id,
+                'avg_rank': float(el.avg_rank),
+                'count_bypass': el.count_bypass,
+                'cycle': el.cycle,
+                'time_bypass': int(el.time_bypass)
+            }
+            for el in qrt.all()]
+
+    def get_status_user_basic(self, user=None, start_time=None, end_time=None):
+        return self.get_list_user_basic(user, start_time, end_time)
+
 
 if __name__ == '__main__':
     server = MainDataBase()
     # test = server.is_cleaner_on_bypass('1', 1625934870036)
     # print(test)
-    test = server.get_status_posts_detail(f"'мясной ряд'", 'week')
+    test = server.get_status_user_basic()
+    print(test)
     import json
     print(json.dumps(test, indent=4, ensure_ascii=False))
 

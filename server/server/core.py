@@ -115,6 +115,10 @@ class Server:
             response = request
         elif ACTION in request and request[ACTION] =='GET_IMAGE_FOR_BYPASS':
             response = request
+        elif ACTION in request and request[ACTION] == 'GET_BYPASS_RANK_IMAGE_COUNT':
+            response = request
+        elif ACTION in request and request[ACTION] == 'GET_SINGLE_USER_STAT':
+            response = request
         else:
             response = {RESPONSE: ERROR}
             log.error(request)
@@ -316,7 +320,7 @@ class Server:
                                                   self.path_img,
                                                   request[PASSWD_HASH],
                                                   request['START_SHIFT'])
-                        self.create_image_file(request['PATH'])
+                        await self.create_image_file(request['PATH'])
 
                     # await send_msg(websocket,
                     #                await self.process_client_message(
@@ -331,7 +335,7 @@ class Server:
                                                   request[ADDRESS],
                                                   request[DESCRIPTION],
                                                   self.path_img)
-                    self.create_image_file(request['PATH'])
+                    await self.create_image_file(request['PATH'])
                     request['image'] = self.path_img
                     requests = dict(
                         [[k.lower(), v] for k, v in request.items()])
@@ -357,7 +361,7 @@ class Server:
                                               self.path_img,
                                               request[QRCODE],
                                               request[QRCODE_IMG])
-                    self.create_image_file(request['PATH'])
+                    await self.create_image_file(request['PATH'])
                     request['image'] = self.path_img
                     requests = dict(
                         [[k.lower(), v] for k, v in request.items()])
@@ -379,7 +383,7 @@ class Server:
                                                    request[NAME],
                                                    request[DESCRIPTION],
                                                    self.path_img)
-                    self.create_image_file(request['PATH'])
+                    await self.create_image_file(request['PATH'])
                     # components = self.database.get_components()
                     request['image'] = self.path_img
                     requests = dict(
@@ -407,7 +411,7 @@ class Server:
                         request[NAME],
                         request[RANK],
                         self.path_img)
-                    self.create_image_file(request['PATH'])
+                    await self.create_image_file(request['PATH'])
                     request['image'] = self.path_img
                     requests = dict(
                         [[k.lower(), v] for k, v in request.items()])
@@ -444,7 +448,7 @@ class Server:
                     print(request)
                     PathMaker.change_path(path_exists.rsplit(os.sep, 1)[0],
                                           name_directory, key_editor)
-                    self.create_image_file(request['PATH'])
+                    await self.create_image_file(request['PATH'])
                     request['PATH'] = 0
                     request[IMG] = request[IMAGE]
                     requests = dict(
@@ -893,19 +897,38 @@ class Server:
                             request[END_TIME], True)
                     except:
                         pass
-                elif ACTION in request and request['ACTION'] == 'GET_IMAGE_FOR_BYPASS':
-                    images = self.database.get_photo_rank_gallery(request[BYPASS_RANK_ID])
+                elif ACTION in request and request[ACTION] == 'GET_IMAGE_FOR_BYPASS_COUNT':
+                    images_count = self.database.get_photo_rank_gallery_count(request[BYPASS_RANK_ID])
+                    send_length = {
+                        ACTION: 'GET_BYPASS_RANK_IMAGE_COUNT',
+                        'LENGTH': images_count
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(send_length))
+
+                elif ACTION in request and request[ACTION] == 'GET_IMAGE_FOR_BYPASS':
+                    images = self.database.get_photo_rank_gallery(request[BYPASS_RANK_ID],
+                                                                  request['LIMIT'],
+                                                                  request['OFFSET'])
                     photo_dict = {
-                        'ACTION': 'GET_IMAGE_FOR_BYPASS',
-                        'BYPASS_RANK_ID': request[BYPASS_RANK_ID],
+                        ACTION: 'GET_IMAGE_FOR_BYPASS',
+                        BYPASS_RANK_ID: request[BYPASS_RANK_ID],
                         'CONTENT': self.get_content_list(images)
                     }
                     print(photo_dict)
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        photo_dict))
-
-
+                elif ACTION in request and request[ACTION] == 'GET_SINGLE_USER_STAT':
+                    user_stat = self.database.get_response_for_universal_query(request['USER_ID'])
+                    stat_dict = {
+                        ACTION: 'GET_SINGLE_USER_STAT',
+                        MESSAGE: user_stat
+                    }
+                    with open('testik.txt', 'w', encoding='utf-8') as f:
+                        f.write(str(user_stat))
+                    await send_msg(websocket,
+                                   await self.process_client_message(stat_dict))
 
         finally:
             await self.unregister(websocket)
@@ -921,7 +944,7 @@ if __name__ == '__main__':
             port = int(sys.argv[4])
             print(type(port))
 
-    server = Server('192.168.1.4', 8765)
+    server = Server('192.168.1.2', 8760)
     server.start()
 
     print(sys.argv)
