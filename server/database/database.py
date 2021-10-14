@@ -1,7 +1,7 @@
 import time
 import psycopg2
 from sqlalchemy import Column, BigInteger, Boolean, Integer, String, Text, ForeignKey, \
-    create_engine, Table, MetaData, desc
+    create_engine, Table, MetaData, Date, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.orm import scoped_session
@@ -11,7 +11,7 @@ from time import time
 import random
 from server.database.query_text.queries import *
 from server.database.query_text.view import view_create, view_drop, view_create_detail, view_drop_detail
-from server.utilities.helper_functions.get_today import get_today
+from server.utilities.helper_functions.get_today import get_today, get_start_day
 STOP_BYPASS = 3600
 
 class MainDataBase:
@@ -311,14 +311,22 @@ class MainDataBase:
             self.start_shift = start_shift
             self.create_date = int(time() * 1000)
 
+    class UserCycleOfBypass(Base):
+        __tablename__ = 'user_cycle_of_bypass'
+        id = Column(BigInteger, primary_key=True, autoincrement=True)
+        user_id = Column(BigInteger, ForeignKey('user.id'), nullable=False)
+        building_id = Column(BigInteger, ForeignKey('building.id'), nullable=False)
+        end_time = Column(Text, nullable=False)
+        create_date_row = Column(Date, nullable=False)
+
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.7:5480/postgres', pool_recycle=7200)
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.10:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
         self.session = Session()
 
-        # will added cleat list function connected users
+        # will added clear list function connected users
         self.session.query(self.ActiveUser).delete()
         self.session.commit()
 
@@ -375,16 +383,18 @@ class MainDataBase:
         :param id_ws_handler: 
         :return: 
         """
-        user_active_from_id = self.session.query(self.ActiveUser).filter_by(id_ws=id_ws_handler).first()
+        user_active_from_id = self.session.query(self.ActiveUser).filter_by(
+            id_ws=id_ws_handler).first()
         print(user_active_from_id)
         if user_active_from_id:
             user_active_from_id.user_id = user_id
         else:
-            active_user_row = self.ActiveUser(int(user_id), ip, port, time_conn, id_ws_handler)
+            active_user_row = self.ActiveUser(int(user_id), ip, port,
+                                              time_conn, id_ws_handler)
             self.session.add(active_user_row)
         self.session.commit()
     
-    def user_critical_logout(self, id_ws_handler) -> None:
+    def user_critical_logout(self, id_ws_handler):
         """
         
         :param id_ws_handler: 
@@ -394,7 +404,8 @@ class MainDataBase:
             id_ws=id_ws_handler).first()
         print('user', user)
 
-        user_exit = self.session.query(self.ActiveUser).filter_by(id_ws=id_ws_handler).first()
+        user_exit = self.session.query(self.ActiveUser).filter_by(
+            id_ws=id_ws_handler).first()
         self.session.delete(user_exit)
         self.session.commit()
 
@@ -404,15 +415,18 @@ class MainDataBase:
         """
         Method for logout user of server
         :param email: str
+        :param id_ws: str
         :return: None
         """
         user = self.session.query(self.User).filter_by(email=email).first()
         user_count = 1
-        user_active_many = self.session.query(self.ActiveUser).filter_by(user_id=user.id).all()
+        user_active_many = self.session.query(self.ActiveUser).filter_by(
+            user_id=user.id).all()
         if isinstance(user_active_many, list):
             user_count = len(user_active_many)
-            
-        user_row = self.session.query(self.ActiveUser).filter_by(user_id=user.id, id_ws=id_ws).first()
+
+        user_row = self.session.query(self.ActiveUser).filter_by(
+            user_id=user.id, id_ws=id_ws).first()
         user_id = getattr(user_row, 'user_id', None)
         user_row.user_id = None
 
@@ -510,7 +524,8 @@ class MainDataBase:
         :return: None
         """
         user_sh_raw = self.UserShift(user_id, start_shift)
-        user_update_row = self.session.query(self.User).filter_by(id=user_id).first()
+        user_update_row = self.session.query(self.User).filter_by(
+            id=user_id).first()
         user_update_row.start_shift = start_shift
         self.session.add(user_sh_raw)
         self.session.commit()
@@ -1084,7 +1099,8 @@ class MainDataBase:
         :param bypass_rank_id: 
         :return: 
         """
-        return self.session.query(self.PhotoRankGallery).filter_by(bypass_rank_id=bypass_rank_id).count()
+        return self.session.query(self.PhotoRankGallery).filter_by(
+            bypass_rank_id=bypass_rank_id).count()
 
     def get_photo_rank_gallery(self, bypass_rank_id, limit, offset) -> list:
         """
@@ -1094,7 +1110,8 @@ class MainDataBase:
         :param offset: 
         :return: 
         """
-        images_list = self.session.query(self.PhotoRankGallery).filter_by(bypass_rank_id=bypass_rank_id).limit(limit).offset(offset)
+        images_list = self.session.query(self.PhotoRankGallery).filter_by(
+            bypass_rank_id=bypass_rank_id).limit(limit).offset(offset)
         return [{
             'bypass_rank_id': bypass_rank_id,
             'image': el.image
@@ -1151,7 +1168,8 @@ class MainDataBase:
         :param query: 
         :return: 
         """
-        user_stat_row = self.engine.execute(QUERY_STAT_SINGLE_PERSON.format(user_id, get_today())).all()
+        user_stat_row = self.engine.execute(
+            QUERY_STAT_SINGLE_PERSON.format(user_id, get_today())).all()
         return [
             {
                 'id': el[0],
@@ -1184,7 +1202,7 @@ class MainDataBase:
         if period == 'today':
             return self.get_list_posts_detail(
                 get_today(),
-                round(time() * 1000),
+                round(get_today() + TAIL_TODAY),
                 post_name,
                 QUERY_POSTS_DETAIL_LIST
             )
@@ -1192,7 +1210,7 @@ class MainDataBase:
         if period == 'week':
             return self.get_list_posts_detail(
                 round(get_today() - WEEK_MILLISECONDS),
-                round(time() * 1000),
+                round(get_today() + TAIL_TODAY),
                 post_name,
                 QUERY_POSTS_DETAIL_LIST)
         if period == 'month':
@@ -1204,14 +1222,14 @@ class MainDataBase:
             )
             return self.get_list_posts_detail(
                 round(get_today() - MONTH_MILLISECONDS),
-                round(time() * 1000),
+                round(get_today() + TAIL_TODAY),
                 post_name,
                 QUERY_POSTS_DETAIL_LIST
             )
         if period == 'year':
             return self.get_list_posts_detail(
-                round(time() * 1000 - YEAR_MILLISECONDS),
-                round(time() * 1000),
+                round(get_today() - YEAR_MILLISECONDS),
+                round(get_today() + TAIL_TODAY),
                 post_name,
                 QUERY_GET_USERS_DETAIL
             )
@@ -1226,23 +1244,23 @@ class MainDataBase:
         :return: 
         """
         qrt = self.create_remove_view_detail(POSTS_DETAIL_LIST_VIEW.
-                                             format(post_name, start_time, end_time),
+                                             format(post_name, start_time,
+                                                    end_time),
                                              query)
-        print(f'{post_name} post_name')
+        # print(f'{post_name} post_name')
         id_temp = 0
         temp_list = []
         my_dicts = []
-        print(f'{qrt} - This')
         for idx in range(len(qrt)):
             if id_temp == qrt[idx][0]:
-                print('id_temp equal bypass_id')
+                # print('id_temp equal bypass_id')
                 my_dicts[str(qrt[idx][16])] = qrt[idx][14]
                 my_dicts[str(qrt[idx][16]) + '_rank'] = qrt[idx][17]
                 my_dicts[str(qrt[idx][16]) + '_description'] = qrt[idx][15]
                 my_dicts[str(qrt[idx][16]) + '_name_c_r'] = qrt[idx][18]
-                print(my_dicts, 'my_dicts')
+                # print(my_dicts, 'my_dicts')
             if not id_temp:
-                print('no id_temp')
+                # print('no id_temp')
                 my_dicts = {
                     'bypass_id': qrt[idx][0],
                     'user_id': qrt[idx][4],
@@ -1262,7 +1280,7 @@ class MainDataBase:
                 }
                 id_temp = qrt[idx][0]
             if (id_temp != qrt[idx][0] and id_temp) or (len(qrt) - 1 == idx):
-                print('id_temp not equal bypass_id and not id_temp')
+                # print('id_temp not equal bypass_id and not id_temp')
                 temp_list.append(my_dicts)
                 my_dicts = {
                     'bypass_id': qrt[idx][0],
@@ -1281,7 +1299,7 @@ class MainDataBase:
                     'title': f'{qrt[idx][5]} {qrt[idx][6]} {qrt[idx][7]}',
                     'email': qrt[idx][8]
                 }
-                print(my_dicts)
+                # print(my_dicts)
                 if idx == len(qrt) - 1 and qrt[idx][0] != qrt[idx - 1][0]:
                     temp_list.append(my_dicts)
             id_temp = qrt[idx][0]
@@ -1304,7 +1322,7 @@ class MainDataBase:
         if period == 'year':
             return self.get_list_users(YEAR_MILLISECONDS, post_name)
 
-    def get_status_users_detail(self, period, post_name, user_email):
+    def get_status_users_detail(self, period, post_name, user_email, start_time=None):
         """
         
         :param period: 
@@ -1315,47 +1333,144 @@ class MainDataBase:
         if period == 'today':
             return self.get_list_users_detail(
                 round(get_today() - TODAY_MILLISECONDS),
-                round(time() * 1000),
+                round(get_today() + TAIL_TODAY),
                 post_name,
                 user_email,
                 QUERY_GET_USERS_DETAIL
             )
 
         if period == 'week':
-            return self.get_list_users_detail(
+            return self.get_list_users_detail_week_month(
                 round(get_today() - WEEK_MILLISECONDS),
-                round(time() * 1000),
+                round(get_today() + TAIL_TODAY),
                 post_name,
                 user_email,
-                QUERY_GET_USERS_DETAIL)
+                USERS_LIST_QUERY_AVG_MONTH_WEEK,
+                USERS_LIST_VIEW)
+        if period == 'month_range':
+            return self.get_list_users_detail_week_month(
+                round(start_time),
+                round(start_time + MONTH_MILLISECONDS),
+                post_name,
+                user_email,
+                USERS_LIST_QUERY_AVG_MONTH_WEEK,
+                USERS_LIST_VIEW
+            )
         if period == 'month':
-            # self.get_list_users_detail_week_month(
-            #     round(time() * 1000 - MONTH_MILLISECONDS),
+            return self.get_list_users_detail_week_month(
+                round(get_today() - MONTH_MILLISECONDS),
+                round(get_today() + TAIL_TODAY),
+                post_name,
+                user_email,
+                USERS_LIST_QUERY_AVG_MONTH_WEEK,
+                USERS_LIST_VIEW
+            )
+            # return self.get_list_users_detail(
+            #     round(get_today() - MONTH_MILLISECONDS),
             #     round(time() * 1000),
             #     post_name,
             #     user_email,
-            #     QUERY_GET_USERS_DETAIL_WEEK_MONTH
+            #     QUERY_GET_USERS_DETAIL
             # )
-            return self.get_list_users_detail(
-                round(get_today() - MONTH_MILLISECONDS),
-                round(time() * 1000),
+        if period == 'year':
+            return self.get_list_users_detail_week_month(
+                round(get_today() - YEAR_MILLISECONDS),
+                round(get_today() + TAIL_TODAY),
                 post_name,
                 user_email,
-                QUERY_GET_USERS_DETAIL
+                USERS_LIST_QUERY_AVG_MONTH_WEEK,
+                USERS_LIST_VIEW_YEAR
             )
-        if period == 'year':
+        if period == 'day':
+            print(get_start_day(start_time))
+            print('----------')
+            print(start_time)
             return self.get_list_users_detail(
-                round(get_today() - YEAR_MILLISECONDS),
-                round(time() * 1000),
+                round(start_time),
+                round(start_time + TAIL_TODAY),
                 post_name,
                 user_email,
                 QUERY_GET_USERS_DETAIL
             )
 
+    def get_list_users_average_for_post(self, period, start_time, end_time, post_name):
+        start_time_str = 0
+        end_time_str = 0
+        if period == 'today':
+            start_time_str = get_today()
+            end_time_str = get_today() + 86400000
+        if period == 'week':
+            start_time_str = get_today() - WEEK_MILLISECONDS
+            end_time_str = get_today() + 86400000
+        if period == 'month':
+            start_time_str = get_today() - MONTH_MILLISECONDS
+            end_time_str = get_today() + 86400000
+        if period == 'year':
+            start_time_str = get_today() - YEAR_MILLISECONDS
+            end_time_str = get_today() + 86400000
+        if period == 'range':
+            start_time_str = start_time
+            end_time_str = start_time + 86400000
+
+        query = USERS_LIST_QUERY_AVG.format(f"'{post_name}'")
+        create_view = USERS_LIST_VIEW % (start_time_str, end_time_str)
+        qrt = self.create_remove_view_detail(create_view, query)
+        print(str(qrt), 'This are users of detail info')
+        email_tmp = 0
+        temp_list = []
+        my_dicts = []
+
+        for idx in range(len(qrt)):
+            if email_tmp == qrt[idx][0]:
+                print('id_temp equal bypass_id')
+                my_dicts[str(qrt[idx][9])] = qrt[idx][2]
+                my_dicts[str(qrt[idx][9]) + '_rank'] = 0 if qrt[idx][3] is None else float(qrt[idx][3])
+                print(my_dicts, 'my_dicts')
+            if not email_tmp:
+                print('no email_temp')
+                my_dicts = {
+                    'id': str(time()),
+                    'email': qrt[idx][0],
+                    'post_name': qrt[idx][1],
+                    str(qrt[idx][9]): qrt[idx][2],
+                    str(qrt[idx][9]) + '_rank': 0 if qrt[idx][3] is None else float(qrt[idx][3]),
+                    'avg_rank': float(qrt[idx][4]),
+                    'time_bypass': int(qrt[idx][5]),
+                    'count_bypass': qrt[idx][6],
+                    'cleaner': None if qrt[idx][7] is None else qrt[idx][7],
+                    'time_bbb': None if qrt[idx][8] is None else int(qrt[idx][8]),
+                    'post_id': qrt[idx][9]
+                }
+                email_tmp = qrt[idx][0]
+            if email_tmp != qrt[idx][0] and email_tmp or (len(qrt) - 1 == idx):
+                print('id_temp not equal bypass_id and not id_temp')
+                temp_list.append(my_dicts)
+                my_dicts = {
+                    'id': str(time()),
+                    'email': qrt[idx][0],
+                    'post_name': qrt[idx][1],
+                    str(qrt[idx][9]): qrt[idx][2],
+                    str(qrt[idx][9]) + '_rank': None if qrt[idx][3] is None else float(qrt[idx][3]),
+                    'avg_rank': float(qrt[idx][4]),
+                    'time_bypass': int(qrt[idx][5]),
+                    'count_bypass': qrt[idx][6],
+                    'cleaner': None if qrt[idx][7] is None else qrt[idx][7],
+                    'time_bbb': None if qrt[idx][8] is None else int(qrt[idx][8]),
+                    'post_id': qrt[idx][9]
+                }
+                if idx == len(qrt) - 1 and qrt[idx][0] != qrt[idx - 1][0]:
+                    temp_list.append(my_dicts)
+                print(my_dicts)
+            email_tmp = qrt[idx][0]
+            with open('text-test.txt', 'w', encoding='utf-8') as f:
+                f.write(str(temp_list))
+        return temp_list
+
     def get_list_users_detail_week_month(self, start_time, end_time, post_name,
-                                         user_email, query):
+                                         user_email, query, view):
         """
-        
+        доделать изменения добавить отображение и новые данные (зацепка:
+        использовать шаблон для отображения данных на клиенте)
         :param start_time: 
         :param end_time: 
         :param post_name: 
@@ -1363,65 +1478,74 @@ class MainDataBase:
         :param query: 
         :return: 
         """
+        query = query.format(post_name, user_email)
+        print('__________________________')
+        print(f"{start_time} | {end_time}")
+        print('__________________________')
 
-        qrt = self.engine.execute(USERS_DETAIL_LIST_VIEW_WEEK_MONTH.
-                                  format(post_name, user_email,
-                                         start_time, end_time)).all()
-        id_temp = 0
+        create_view = view % (start_time, end_time)
+        qrt = self.create_remove_view_detail(create_view, query)
+
+        anchor = 0
         temp_list = []
         my_dicts = []
         print(f'{qrt} - This')
         for idx in range(len(qrt)):
-            if id_temp == qrt[idx][0]:
+            if anchor == qrt[idx][12]:
                 print('id_temp equal bypass_id')
-                my_dicts[str(qrt[idx][3])] = qrt[idx][4]
-                my_dicts[str(qrt[idx][3]) + '_rank'] = qrt[idx][6]
-                my_dicts[str(qrt[idx][3]) + '_description'] = qrt[idx][5]
+                my_dicts[str(qrt[idx][9])] = qrt[idx][2]
+                my_dicts[str(qrt[idx][9]) + '_rank'] = 0 if qrt[idx][
+                                                                3] is None else float(
+                    qrt[idx][3])
                 print(my_dicts, 'my_dicts')
-            if not id_temp:
-                print('no id_temp')
+            if not anchor:
+                print('no email_temp')
                 my_dicts = {
-                    'bypass_id': qrt[idx][0],
-                    'user_id': qrt[idx][1],
-                    'cleaner': qrt[idx][2],
-                    'weather': qrt[idx][17],
-                    'temperature': qrt[idx][5],
-                    str(qrt[idx][3]): qrt[idx][4],
-                    str(qrt[idx][3]) + '_rank': qrt[idx][6],
-                    str(qrt[idx][3]) + '_description': qrt[idx][5],
-                    'email': qrt[idx][7],
-                    'post_name': qrt[idx][8],
-                    'title': f'{qrt[idx][9]} {qrt[idx][10]} {qrt[idx][11]}',
+                    'id': str(time()),
+                    'email': qrt[idx][0],
+                    'post_name': qrt[idx][1],
+                    str(qrt[idx][9]): qrt[idx][2],
+                    str(qrt[idx][9]) + '_rank': 0 if qrt[idx][
+                                                         3] is None else float(
+                        qrt[idx][3]),
+                    'avg_rank': float(qrt[idx][4]),
+                    'time_bypass': int(qrt[idx][5]),
+                    'count_bypass': qrt[idx][6],
+                    'cleaner': qrt[idx][7],
+                    'time_bbb': None if qrt[idx][8] is None else int(
+                        qrt[idx][8]),
+                    'post_id': qrt[idx][10],
                     'date': qrt[idx][12],
-                    'count_bypass': qrt[idx][13],
-                    'avg_temperature': qrt[idx][14],
-                    'time_length': qrt[idx][16],
-                    'icon': qrt[idx][15],
+                    'temperature': int(qrt[idx][11]),
+                    'title': f'{qrt[idx][13]} {qrt[idx][14]} {qrt[idx][15]}'
                 }
-                id_temp = qrt[idx][0]
-            if id_temp != qrt[idx][0] and id_temp or (len(qrt) - 1 == idx):
+                anchor = qrt[idx][12]
+            if anchor != qrt[idx][12] and anchor or (len(qrt) - 1 == idx):
                 print('id_temp not equal bypass_id and not id_temp')
                 temp_list.append(my_dicts)
                 my_dicts = {
-                    'bypass_id': qrt[idx][0],
-                    'user_id': qrt[idx][1],
-                    'cleaner': qrt[idx][2],
-                    'weather': qrt[idx][17],
-                    'temperature': qrt[idx][5],
-                    str(qrt[idx][3]): qrt[idx][4],
-                    str(qrt[idx][3]) + '_rank': qrt[idx][6],
-                    str(qrt[idx][3]) + '_description': qrt[idx][5],
-                    'email': qrt[idx][7],
-                    'post_name': qrt[idx][8],
-                    'title': f'{qrt[idx][9]} {qrt[idx][10]} {qrt[idx][11]}',
+                    'id': str(time()),
+                    'email': qrt[idx][0],
+                    'post_name': qrt[idx][1],
+                    str(qrt[idx][9]): qrt[idx][2],
+                    str(qrt[idx][9]) + '_rank': None if qrt[idx][
+                                                            3] is None else float(
+                        qrt[idx][3]),
+                    'avg_rank': float(qrt[idx][4]),
+                    'time_bypass': int(qrt[idx][5]),
+                    'count_bypass': qrt[idx][6],
+                    'cleaner': qrt[idx][7],
+                    'time_bbb': None if qrt[idx][8] is None else int(
+                        qrt[idx][8]),
+                    'post_id': qrt[idx][10],
                     'date': qrt[idx][12],
-                    'count_bypass': qrt[idx][13],
-                    'avg_temperature': qrt[idx][14],
-                    'time_length': qrt[idx][16],
-                    'icon': qrt[idx][15],
+                    'temperature': int(qrt[idx][11]),
+                    'title': f'{qrt[idx][13]} {qrt[idx][14]} {qrt[idx][15]}'
                 }
                 print(my_dicts)
-            id_temp = qrt[idx][0]
+                if idx == len(qrt) - 1 and qrt[idx][12] != qrt[idx - 1][12]:
+                    temp_list.append(my_dicts)
+            anchor = qrt[idx][12]
             with open('text-test.txt', 'w', encoding='utf-8') as f:
                 f.write(str(temp_list))
         return temp_list
@@ -1511,8 +1635,10 @@ class MainDataBase:
         :param post_name:
         :return:
         """
-        qrt = self.create_and_remove_view_and_get_list(is_time, USERS_LIST_VIEW,
-                                                       QUERY_GET_USERS.format(f"'{post_name}'"))
+        qrt = self.create_and_remove_view_and_get_list(is_time,
+                                                       USERS_LIST_VIEW,
+                                                       QUERY_GET_USERS.format(
+                                                           f"'{post_name}'"))
         print(is_time, 'TIme')
         print([el for el in qrt])
         return [{
@@ -1555,12 +1681,14 @@ class MainDataBase:
         :param object_name:
         :return:
         """
-        qrt = self.create_remove_view_detail(POSTS_LIST_VIEW.format(get_today() -
-                                                            is_time),
-                                                       QUERY_GET_POSTS.format(
-                                                           get_today() -
-                                                            is_time, 
-                                                            f"'{object_name}'"))
+        qrt = self.create_remove_view_detail(
+            POSTS_LIST_VIEW.format(get_today() -
+                                   is_time, get_today() +
+                                   TAIL_TODAY),
+            QUERY_GET_POSTS.format(
+                get_today() -
+                is_time,
+                f"'{object_name}'"))
                                                        
         print([el for el in qrt])
         return [{
@@ -1591,7 +1719,7 @@ class MainDataBase:
         return [{
             'id': str(time() + random.randint(1, 15000)),
             'title': el[1],
-            'avgRanks': self._to_fixed(el[-1], 1),
+            'avgRanks': self._to_fixed(el[-2], 1),
             'countBypass': el[7],
             'countTime': el[6],
             'bestPost': el[2],
@@ -1600,7 +1728,8 @@ class MainDataBase:
             'badRank': self._to_fixed(el[5], 1),
             'countCircle': '-',
             'steps': '-',
-            'trand': 1
+            'trand': 1,
+            'building_id': el[-1]
         }
             for el in qrt]
 
@@ -1627,7 +1756,8 @@ class MainDataBase:
         :return: 
         """
         qrt = self.create_remove_view_detail(OBJECT_DETAIL_LIST_VIEW.format(
-            round(get_today()) - is_time, f"'{object_name}'"),
+            round(get_today()) - is_time, f"'{object_name}'",
+            get_today() + TAIL_TODAY),
             QUERY_OBJECT_DETAIL_LIST)
         return [{
             'id': str(time() + random.randint(1, 15000)),
@@ -1673,34 +1803,209 @@ class MainDataBase:
         """
         user_str = f' and u.id={user}' if user else ''
         start_time_str = start_time if start_time else get_today()
-        end_time_str = end_time if end_time else get_today() + 86400000
+        end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+        
         qrt = self.engine.execute(
-            QUERY_GET_BASE_STATIC_BY_USER.format(user_str,
+            QUERY_GET_BASE_STATIC_BY_USER.format(
                                                  start_time_str,
                                                  end_time_str))
-        return [
+
+        qrt_prev = self.engine.execute(
+            QUERY_GET_BASE_STATIC_BY_USER.format(
+            start_time_str - (end_time_str - start_time_str),
+                start_time_str
+        ))
+        current_statistics = [
             {
-                'user_id': el.id,
+                'id': el.id,
                 'avg_rank': float(el.avg_rank),
                 'count_bypass': el.count_bypass,
                 'cycle': el.cycle,
+                'time_between_bypass': int(el.tbr) if el.tbr else None,
                 'time_bypass': int(el.time_bypass)
             }
             for el in qrt.all()]
+        prev_statistics = [
+            {
+                'id': el.id,
+                'prev_avg_rank': float(el.avg_rank),
+                'prev_count_bypass': el.count_bypass,
+                'prev_cycle': el.cycle,
+                'prev_time_between_bypass': int(el.tbr) if el.tbr else None,
+                'prev_time_bypass': int(el.time_bypass)
+            }
+            for el in qrt_prev.all()]
+        tmp_dict = {}
+        storage_to_transfer = []
+        list_of_ids = {}
+        global_list_stat = [*current_statistics, *prev_statistics]
+        for i in range(len(global_list_stat)):
+            if str(global_list_stat[i]['id']) in list_of_ids:
+                storage_to_transfer[
+                    list_of_ids.get(str(global_list_stat[i]['id']))].update(
+                    global_list_stat[i])
+            else:
+                storage_to_transfer.append(global_list_stat[i])
+                list_of_ids[str(global_list_stat[i]['id'])] = len(
+                    storage_to_transfer) - 1
+
+        return storage_to_transfer
 
     def get_status_user_basic(self, user=None, start_time=None, end_time=None):
         return self.get_list_user_basic(user, start_time, end_time)
+
+    def get_list_user_with_tbr(self, building_id, start_time=None, end_time=None) -> list:
+        """
+        :param building_id:
+        :param start_time:
+        :param end_time:
+        :return: list
+        """
+        start_time_str = start_time if start_time else get_today()
+        end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+
+        qrt = self.engine.execute(
+            QUERY_GET_STATIC_BY_USER_WITH_TBR.format(
+                start_time_str,
+                end_time_str,
+                building_id))
+
+        current_statistics = [
+            {
+                'id': el.id,
+                'avg_rank': float(el.avg_rank),
+                'count_bypass': el.count_bypass,
+                'cycle': el.cycle,
+                'time_between_bypass': int(el.tbr) if el.tbr else None,
+                'time_bypass': int(el.time_bypass),
+                'building_id': building_id,
+                'surname': el.surname,
+                'first_name': el.first_name,
+                'lastname': el.lastname,
+                'trand': 1
+            }
+            for el in qrt.all()]
+        return current_statistics
+
+    def get_status_user_with_tbr(self, period=None, building_id=None, 
+                                 start_time=None, end_time=None):
+        if period == 'today':
+            pass
+        if period == 'week':
+            start_time = get_today() - WEEK_MILLISECONDS
+        if period == 'month':
+            start_time = get_today() - MONTH_MILLISECONDS
+        if period == 'year':
+            start_time = get_today() - YEAR_MILLISECONDS
+            
+        return self.get_list_user_with_tbr(building_id, start_time, end_time)
+
+    def get_list_user_with_tbr_detail(self,
+                                      user_id=None,
+                                      building_id=None,
+                                      start_time=None,
+                                      end_time=None):
+
+        start_time_str = start_time if start_time else get_today()
+        end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+
+        qrt = self.engine.execute(QUERY_GET_STATIC_BY_USER_WITH_TBR_DETAIL.
+                                  format(user_id, building_id, start_time_str,
+                                         end_time_str)).all()
+        print(f'{user_id} {building_id} EMAIL')
+        user_id_temp = 0
+        post_id_temp = 0
+        temp_list = []
+        my_dicts = []
+        print(f'{qrt} - This')
+        for idx in range(len(qrt)):
+            if post_id_temp == qrt[idx][2]:
+                print('user_id_temp equal user_id & post_id_temp equal post_id')
+                my_dicts[str(qrt[idx][3])] = qrt[idx][9]
+                my_dicts[str(qrt[idx][3]) + '_rank'] = float(qrt[idx][11])
+                print(my_dicts, 'my_dicts')
+            if not post_id_temp:
+                print('no id_temp')
+                my_dicts = {
+                    'user_id': qrt[idx][0],
+                    'building_id': qrt[idx][1],
+                    'post_id': qrt[idx][2],
+                    'component_id': qrt[idx][3],
+                    'surname': qrt[idx][4],
+                    'first_name': qrt[idx][5],
+                    'lastname': qrt[idx][6],
+                    'email': qrt[idx][7],
+                    'post_name': qrt[idx][8],
+                    str(qrt[idx][3]): qrt[idx][9],
+                    str(qrt[idx][3]) + '_rank': float(qrt[idx][11]),
+                    'avg_rank_post': float(qrt[idx][10]),
+                    'count_bypass': qrt[idx][12],
+                    'cleaner': qrt[idx][13],
+                    'time_bypasses': int(qrt[idx][14]),
+                    'avg_bp_by_bp': qrt[idx][15],
+                    'avg_temperature': int(qrt[idx][16]),
+                    'title': f'{qrt[idx][4]} {qrt[idx][5]} {qrt[idx][6]}'
+                }
+                user_id_temp = qrt[idx][0]
+                post_id_temp = qrt[idx][2]
+            if (post_id_temp != qrt[idx][2] and post_id_temp) or (len(qrt) - 1 == idx):
+                print('id_temp not equal bypass_id and not id_temp')
+                temp_list.append(my_dicts)
+                my_dicts = {
+                    'user_id': qrt[idx][0],
+                    'building_id': qrt[idx][1],
+                    'post_id': qrt[idx][2],
+                    'component_id': qrt[idx][3],
+                    'surname': qrt[idx][4],
+                    'first_name': qrt[idx][5],
+                    'lastname': qrt[idx][6],
+                    'email': qrt[idx][7],
+                    'post_name': qrt[idx][8],
+                    str(qrt[idx][3]): qrt[idx][9],
+                    str(qrt[idx][3]) + '_rank': float(qrt[idx][11]),
+                    'avg_rank_post': float(qrt[idx][10]),
+                    'count_bypass': qrt[idx][12],
+                    'cleaner': qrt[idx][13],
+                    'time_bypasses': int(qrt[idx][14]),
+                    'avg_bp_by_bp': qrt[idx][15],
+                    'avg_temperature': int(qrt[idx][16]),
+                    'title': f'{qrt[idx][4]} {qrt[idx][5]} {qrt[idx][6]}'
+                }
+                print(my_dicts)
+                if idx == len(qrt) - 1 and qrt[idx][0] != qrt[idx - 1][0]:
+                    temp_list.append(my_dicts)
+            user_id_temp = qrt[idx][0]
+            post_id_temp = qrt[idx][2]
+
+        return temp_list
+
+    def get_status_user_with_tbr_detail(self, period, user_id=None,
+                                        building_id=None, start_time=None,
+                                        end_time=None):
+        if period == 'today':
+            pass
+        if period == 'week':
+            start_time = get_today() - WEEK_MILLISECONDS
+        if period == 'month':
+            start_time = get_today() - MONTH_MILLISECONDS
+        if period == 'year':
+            start_time = get_today() - YEAR_MILLISECONDS
+
+        return self.get_list_user_with_tbr_detail(user_id, building_id, start_time, end_time)
 
 
 if __name__ == '__main__':
     server = MainDataBase()
     # test = server.is_cleaner_on_bypass('1', 1625934870036)
     # print(test)
-    test = server.get_status_user_basic()
-    print(test)
+    # test = server.get_status_user_basic()
+    # print(test)
     import json
-    print(json.dumps(test, indent=4, ensure_ascii=False))
-
+    # print(json.dumps(test, indent=4, ensure_ascii=False))
+    # print(get_today())
+    print(server.get_status_users_detail('month', f"'бокс'", f"'boris12343@inbox.ru'"))
+    # test = server.get_status_posts_detail("'мрт'", 'week')
+    # print(json.dumps(test, indent=4, ensure_ascii=False))
     # server.create_component('Обои', 'ktkt', 'C://ppgd')
     # server.create_component('Кресла', 'ktkt', 'C://ppgd')
     # server.create_component('Витрины', 'ktkt', 'C://ppgd')
@@ -1767,5 +2072,12 @@ if __name__ == '__main__':
     print(v1.__dict__)
     print('______________')
     my_dict = [('by', 'Code', 'Lermontov', 'Речной бокс', 'постоковский', 'Смесители', 4.17, 'Двери', 2.5, 3.3349999999999995, 2, 15196)]
+    print('T+++++T')
+    print(get_today() - MONTH_MILLISECONDS)
+    print(get_today())
 
-
+    print('----------')
+    end_time = get_today() + TAIL_TODAY
+    print(
+        json.dumps(server.get_list_users_average_for_post(1629752400000, end_time, 'мрт'), indent=4, ensure_ascii=False))
+    # server.engine.execute(USERS_LIST_QUERY_AVG.format('мрт')).all()

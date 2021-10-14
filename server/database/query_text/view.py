@@ -2,6 +2,7 @@ from sqlalchemy.sql import text
 from sqlalchemy import Table, MetaData
 from sqlalchemy_views import CreateView, DropView
 from time import time
+from server.database.query_text.queries import *
 from server.utilities.helper_functions.get_today import get_today
 
 
@@ -20,7 +21,7 @@ def view_drop_detail():
 
 def view_create(remainder, definition):
     view = Table('temporary_view', MetaData(), schema='public')
-    definition = text(definition % (get_today() - remainder))
+    definition = text(definition % (get_today() - remainder, get_today() + TAIL_TODAY))
     create_view = CreateView(view, definition)
     return str(create_view.compile()).strip()
 

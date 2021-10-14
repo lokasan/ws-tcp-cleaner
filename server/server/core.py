@@ -86,38 +86,48 @@ class Server:
                 GET_COMPONENTS_RANKS_SYNCHRONIZE:
             response = request
         elif ACTION in request and request[ACTION] == \
-                'GET_USER_IN_LOCAL_BASE':
+                GET_USER_IN_LOCAL_BASE:
             response = request
         elif ACTION in request and request[ACTION] == GET_BYPASS_STATUS_USERS:
             response = request
         elif ACTION in request and request[ACTION] == \
                 GET_BYPASS_STATUS_USERS_DETAIL:
             response = request
-        elif ACTION in request and request[ACTION] == 'CHECK_EMAIL':
+        elif ACTION in request and request[ACTION] == CHECK_EMAIL:
             response = request
-        elif ACTION in request and request[ACTION] == 'GET_USERS':
+        elif ACTION in request and request[ACTION] == GET_USERS:
             response = request
-        elif ACTION in request and request[ACTION] == 'ADD_ACTIVE_USER':
+        elif ACTION in request and request[ACTION] == ADD_ACTIVE_USER:
             response = request
-        elif ACTION in request and request[ACTION] == 'REMOVE_ACTIVE_USER':
+        elif ACTION in request and request[ACTION] == REMOVE_ACTIVE_USER:
             response = request
-        elif ACTION in request and request[ACTION] == 'GET_ACTIVE_USERS':
+        elif ACTION in request and request[ACTION] == GET_ACTIVE_USERS:
             response = request
-        elif ACTION in request and request[ACTION] == 'GET_USER_SHIFT':
+        elif ACTION in request and request[ACTION] == GET_USER_SHIFT:
             response = request
-        elif ACTION in request and request[ACTION] == 'USER_LOGOUT':
+        elif ACTION in request and request[ACTION] == USER_LOGOUT:
             response = request
-        elif ACTION in request and request[ACTION] == 'CHECK_AUTHENTICATION':
+        elif ACTION in request and request[ACTION] == CHECK_AUTHENTICATION:
             response = request
-        elif ACTION in request and request[ACTION] == 'UPDATE_EMPLOEE_PRIVILEG':
+        elif ACTION in request and request[ACTION] == UPDATE_EMPLOEE_PRIVILEG:
             response = request
-        elif ACTION in request and request[ACTION] == 'GET_BYPASS_STATUS_OBJECT_DETAIL':
+        elif ACTION in request and request[ACTION] == GET_BYPASS_STATUS_OBJECT_DETAIL:
             response = request
-        elif ACTION in request and request[ACTION] =='GET_IMAGE_FOR_BYPASS':
+        elif ACTION in request and request[ACTION] == GET_IMAGE_FOR_BYPASS:
             response = request
-        elif ACTION in request and request[ACTION] == 'GET_BYPASS_RANK_IMAGE_COUNT':
+        elif ACTION in request and request[ACTION] == GET_BYPASS_RANK_IMAGE_COUNT:
             response = request
-        elif ACTION in request and request[ACTION] == 'GET_SINGLE_USER_STAT':
+        elif ACTION in request and request[ACTION] == GET_SINGLE_USER_STAT:
+            response = request
+        elif ACTION in request and request[ACTION] == GET_USERS_BASIC_STAT:
+            response = request
+        elif ACTION in request and request[ACTION] == GET_LIST_USERS_AVERAGE_FOR_POST:
+            response = request
+        elif ACTION in request and request[ACTION] == GET_BYPASS_STATUS_USERS_DETAIL_FOR_DAY:
+            response = request
+        elif ACTION in request and request[ACTION] == 'GET_STATUS_USER_WITH_TBR':
+            response = request
+        elif ACTION in request and request[ACTION] == 'GET_STATUS_USER_WITH_TBR_DETAIL':
             response = request
         else:
             response = {RESPONSE: ERROR}
@@ -147,8 +157,8 @@ class Server:
                      REMOVE_ELEMENTS: removed_elements,
                      CREATE_ELEMENTS: added_elements,
                      CONTENT: self.get_content_list(added_elements),
-                     'CONTENT_UPDATE': self.get_content_list(updated_elements),
-                     'TARGET_ID': target_id
+                     CONTENT_UPDATE: self.get_content_list(updated_elements),
+                     TARGET_ID: target_id
                      }
         if websocket:
             await send_msg(websocket,
@@ -229,7 +239,9 @@ class Server:
         return os.path.join(os.path.normpath(
             os.path.dirname(os.path.abspath(
                 __file__)) + os.sep + os.pardir),
-            f'images{os.sep}' + 'bypass' + os.sep + str(bypass_id) + os.sep + 'bypass_rank' + os.sep + str(bypass_rank_id) + os.sep + str(file_name) + '.jpeg')
+            f'images{os.sep}' + 'bypass' + os.sep + str(
+                bypass_id) + os.sep + 'bypass_rank' + os.sep + str(
+                bypass_rank_id) + os.sep + str(file_name) + '.jpeg')
 
     def get_full_path(self, request):
         return os.path.join(os.path.normpath(
@@ -263,7 +275,7 @@ class Server:
         self.clients.remove(websocket)
         for client in self.clients:
             await send_msg(client, await self.process_client_message(
-                {ACTION: 'REMOVE_ACTIVE_USER', MESSAGE: getattr(user, 'user_id', None)}))
+                {ACTION: REMOVE_ACTIVE_USER, MESSAGE: getattr(user, 'user_id', None)}))
 
 
 
@@ -308,7 +320,7 @@ class Server:
                     print(is_user_exists, ' Base')
                     print(request, 'user_request')
                     if not is_user_exists:
-                        self.database.create_user(request['ID'],
+                        self.database.create_user(request[ID],
                                                   request[SURNAME],
                                                   request[NAME],
                                                   request[LASTNAME],
@@ -319,7 +331,7 @@ class Server:
                                                   request[STATUS],
                                                   self.path_img,
                                                   request[PASSWD_HASH],
-                                                  request['START_SHIFT'])
+                                                  request[START_SHIFT])
                         await self.create_image_file(request['PATH'])
 
                     # await send_msg(websocket,
@@ -361,11 +373,11 @@ class Server:
                                               self.path_img,
                                               request[QRCODE],
                                               request[QRCODE_IMG])
-                    await self.create_image_file(request['PATH'])
+                    await self.create_image_file(request[PATH])
                     request['image'] = self.path_img
                     requests = dict(
                         [[k.lower(), v] for k, v in request.items()])
-                    request['PATH'] = 0
+                    request[PATH] = 0
                     added_element = list()
                     added_element.append(requests)
                     # posts = self.database.get_posts(request[BUILDING_ID])
@@ -383,12 +395,12 @@ class Server:
                                                    request[NAME],
                                                    request[DESCRIPTION],
                                                    self.path_img)
-                    await self.create_image_file(request['PATH'])
+                    await self.create_image_file(request[PATH])
                     # components = self.database.get_components()
                     request['image'] = self.path_img
                     requests = dict(
                         [[k.lower(), v] for k, v in request.items()])
-                    request['PATH'] = 0
+                    request[PATH] = 0
                     added_element = list()
                     added_element.append(requests)
 
@@ -411,11 +423,11 @@ class Server:
                         request[NAME],
                         request[RANK],
                         self.path_img)
-                    await self.create_image_file(request['PATH'])
+                    await self.create_image_file(request[PATH])
                     request['image'] = self.path_img
                     requests = dict(
                         [[k.lower(), v] for k, v in request.items()])
-                    request['PATH'] = 0
+                    request[PATH] = 0
                     added_element = list()
                     added_element.append(requests)
 
@@ -448,8 +460,8 @@ class Server:
                     print(request)
                     PathMaker.change_path(path_exists.rsplit(os.sep, 1)[0],
                                           name_directory, key_editor)
-                    await self.create_image_file(request['PATH'])
-                    request['PATH'] = 0
+                    await self.create_image_file(request[PATH])
+                    request[PATH] = 0
                     request[IMG] = request[IMAGE]
                     requests = dict(
                         [[k.lower(), v] for k, v in request.items()])
@@ -466,11 +478,11 @@ class Server:
                 elif ACTION in request and request[ACTION] == \
                         REMOVE_COMPONENT_RANK:
                     path = self.database.remove_component_rank(
-                        request['ID'])
+                        request[ID])
                     if path:
                         shutil.rmtree(path.rsplit(os.sep, 1)[0])
                         remove_element = list()
-                        remove_element.append({'id': request['ID']})
+                        remove_element.append({'id': request[ID]})
                         print(remove_element)
                     # posts = self.database.get_posts(request[BUILDING_ID])
                     # await self.refresh_elements(GET_COMPONENTS_RANKS_SYNCHRONIZE,
@@ -483,7 +495,7 @@ class Server:
                 elif ACTION in request and request[ACTION] == \
                         CREATE_COMPONENT_TO_POST_LINK:
                     self.database.create_component_to_post_link(
-                        request['ID'],
+                        request[ID],
                         request[POST_ID], request[COMPONENT_ID])
 
                 elif ACTION in request and request[ACTION] == \
@@ -539,17 +551,17 @@ class Server:
                     shutil.rmtree(path.rsplit(os.sep, 1)[0])
 
                 elif ACTION in request and request[ACTION] == CREATE_BYPASS:
-                    self.database.create_bypass(request['ID'],
+                    self.database.create_bypass(request[ID],
                                                 request[USER_ID],
                                                 request[POST_ID],
                                                 request[START_TIME],
                                                 request[WEATHER],
                                                 request[TEMPERATURE],
-                                                request['ICON'])
+                                                request[ICON])
 
                 elif ACTION in request and request[ACTION] == \
                         CREATE_BYPASS_RANK:
-                    self.database.create_bypass_rank(request['ID'],
+                    self.database.create_bypass_rank(request[ID],
                                                      request[BYPASS_ID],
                                                      request[COMPONENT_ID],
                                                      request[START_TIME])
@@ -578,10 +590,10 @@ class Server:
                     # await send_msg(websocket, \
                     # await process_client_message(request))
                     # fix bug autoincrement
-                elif ACTION in request and request[ACTION] == 'GET_USERS':
+                elif ACTION in request and request[ACTION] == GET_USERS:
                     users = self.database.get_users()
 
-                    client_elements = request['LOCAL_DATABASE']
+                    client_elements = request[LOCAL_DATABASE]
                     print('client', client_elements)
                     client_server = client_elements + users
 
@@ -601,7 +613,7 @@ class Server:
 
                     print(client_elements)
 
-                    await self.refresh_elements('GET_USERS', added_elements,
+                    await self.refresh_elements(GET_USERS, added_elements,
                                                 removed_elements, websocket,
                                                 updated_elements=updated_elements)
 
@@ -610,7 +622,7 @@ class Server:
                     buildings = self.database.get_buildings()
 
                     # record elements from client app
-                    client_elements = request['LOCAL_DATABASE']
+                    client_elements = request[LOCAL_DATABASE]
 
                     # unite elements with server and with client databases
                     client_server = client_elements + buildings
@@ -636,7 +648,7 @@ class Server:
                     posts = self.database.get_posts(request[MESSAGE])
 
                     # record elements from client app
-                    client_elements = request['LOCAL_DATABASE']
+                    client_elements = request[LOCAL_DATABASE]
 
                     # unite elements with server and with client databases
                     client_server = client_elements + posts
@@ -665,7 +677,7 @@ class Server:
                     components = self.database.get_components()
 
                     # record elements from client app
-                    client_elements = request['LOCAL_DATABASE']
+                    client_elements = request[LOCAL_DATABASE]
 
                     # unite elements with server and with client databases
                     client_server = client_elements + components
@@ -693,7 +705,7 @@ class Server:
                     print(ranks)
 
                     # record elements from client app
-                    client_elements = request['LOCAL_DATABASE']
+                    client_elements = request[LOCAL_DATABASE]
 
                     # unite elements with server and with client databases
                     client_server = client_elements + ranks
@@ -709,7 +721,7 @@ class Server:
                         client_elements,
                         ranks
                     )
-                    print(request["LOCAL_DATABASE"])
+                    print(request[LOCAL_DATABASE])
                     for el in added_elements:
                         for els in updated_elements:
                             if el['id'] == els['id'] and el['rank'] == \
@@ -752,34 +764,34 @@ class Server:
                                        {ACTION: GET_BYPASS_STATUS_OBJECT,
                                         MESSAGE: status_object}))
                 elif ACTION in request and request[ACTION] == \
-                    'GET_BYPASS_STATUS_OBJECT_DETAIL':
+                    GET_BYPASS_STATUS_OBJECT_DETAIL:
                     status_object_detail = self.database.get_status_object_detail(
                         request[PERIOD],
-                        request['OBJECT_NAME']
+                        request[OBJECT_NAME]
 
                     )
 
                     print(status_object_detail, 'STATUS_OBJ-detail')
                     await send_msg(websocket,
                                    await self.process_client_message(
-                                       {ACTION: 'GET_BYPASS_STATUS_OBJECT_DETAIL',
+                                       {ACTION: GET_BYPASS_STATUS_OBJECT_DETAIL,
                                         MESSAGE: status_object_detail}))
                 elif ACTION in request and request[ACTION] == \
                         GET_BYPASS_STATUS_POSTS:
                     status_posts = self.database.get_status_posts(
-                        request['OBJECT_NAME'], request[PERIOD])
+                        request[OBJECT_NAME], request[PERIOD])
                     print(status_posts, 'INFO-FOR-POSTS')
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        {ACTION: GET_BYPASS_STATUS_POSTS,
                                         MESSAGE: status_posts}))
                     print(request[PERIOD], ' - period ',
-                          request['OBJECT_NAME'])
+                          request[OBJECT_NAME])
 
                 elif ACTION in request and request[ACTION] == \
                         GET_BYPASS_STATUS_USERS:
                     status_users = self.database.get_status_users(
-                        request['POST_NAME'], request[PERIOD])
+                        request[POST_NAME], request[PERIOD])
                     print(status_users, 'USERS_STATUS')
                     await send_msg(websocket,
                                    await self.process_client_message(
@@ -791,82 +803,96 @@ class Server:
                     print(request)
                     status_users_detail = self.database.get_status_users_detail(
                         request[PERIOD],
-                        f"'{request['POST_NAME']}'",
-                        f"'{request['USER_EMAIL']}'"
+                        f"'{request[POST_NAME]}'",
+                        f"'{request[USER_EMAIL]}'",
+                        request[START_TIME]
                     )
+                    action_status = GET_BYPASS_STATUS_USERS_DETAIL_FOR_DAY if \
+                    request[PERIOD] == 'day' or request[
+                        PERIOD] == 'today' else GET_BYPASS_STATUS_USERS_DETAIL
                     print(status_users_detail)
                     await send_msg(websocket,
                                    await self.process_client_message(
-                                       {ACTION: GET_BYPASS_STATUS_USERS_DETAIL,
-                                        MESSAGE: status_users_detail}
+                                       {
+                                           ACTION: action_status,
+                                           PERIOD: request[PERIOD],
+                                           MESSAGE: status_users_detail}
                                    ))
-                elif ACTION in request and request[ACTION] == 'CHECK_EMAIL':
+                elif ACTION in request and request[ACTION] == CHECK_EMAIL:
                     exists_email = self.database.get_user_email(request[EMAIL])
                     print(exists_email)
                     await send_msg(websocket, await self.process_client_message(
-                        {ACTION: 'CHECK_EMAIL',
+                        {ACTION: CHECK_EMAIL,
                          MESSAGE: exists_email}
                     ))
-                elif ACTION in request and request[ACTION] == 'ADD_ACTIVE_USER':
-                    self.database.user_login(request['ID'], websocket.remote_address[0], websocket.remote_address[1],
-                                             int(time.time() * 1000) + 10800000,
+                elif ACTION in request and request[ACTION] == ADD_ACTIVE_USER:
+                    self.database.user_login(request[ID],
+                                             websocket.remote_address[0],
+                                             websocket.remote_address[1],
+                                             int(
+                                                 time.time() * 1000) + 10800000,
                                              str(id(websocket)))
                     print(f'IP ADDR: {websocket.remote_address[0]} ALL: {websocket.remote_address}')
-                    await self.refresh_elements_no_content('ADD_ACTIVE_USER',
-                                                           [request['ID']])
+                    await self.refresh_elements_no_content(ADD_ACTIVE_USER,
+                                                           [request[ID]])
                     print(id(websocket.ws_handler))
 
-                elif ACTION in request and request[ACTION] == 'GET_ACTIVE_USERS':
+                elif ACTION in request and request[ACTION] == GET_ACTIVE_USERS:
                     active_users = self.database.get_active_users()
-                    await self.refresh_elements_no_content('GET_ACTIVE_USERS',
+                    await self.refresh_elements_no_content(GET_ACTIVE_USERS,
                                                            active_users)
                 # for client in self.clients:
                 #     await send_msg(client, await self.process_client_message(
                 #         {ACTION: MESSAGE, MESSAGE: 'hi'}))
-                elif ACTION in request and request[ACTION] == 'UPDATE_EMPLOEE_PRIVILEG':
-                    print(request['EMPLOEE']['privileg'])
+                elif ACTION in request and request[ACTION] == UPDATE_EMPLOEE_PRIVILEG:
+                    print(request[EMPLOEE]['privileg'])
                     update_privileg = {
-                        'privileg': request['EMPLOEE']['privileg'],
-                        'id': request['EMPLOEE']['id'],
+                        'privileg': request[EMPLOEE]['privileg'],
+                        'id': request[EMPLOEE]['id'],
                     }
-                    self.database.update_emploee_privileg(request['EMPLOEE']['privileg'],
-                                                          request['EMPLOEE']['id'])
-                    await self.refresh_elements_no_content('UPDATE_EMPLOEE_PRIVILEG',
+                    self.database.update_emploee_privileg(request[EMPLOEE]['privileg'],
+                                                          request[EMPLOEE]['id'])
+                    await self.refresh_elements_no_content(UPDATE_EMPLOEE_PRIVILEG,
                                                            update_privileg)
-                elif ACTION in request and request[ACTION] == 'CREATE_USER_SHIFT':
+                elif ACTION in request and request[ACTION] == CREATE_USER_SHIFT:
                     print(request)
-                    user = self.database.get_user_shift(request['USER_ID'])
+                    user = self.database.get_user_shift(request[USER_ID])
                     if user:
                         if (int(time.time() * 1000) - int(user['create_date'])) > 600000:
-                            self.database.create_user_shift(request['USER_ID'], request['START_SHIFT'])
+                            self.database.create_user_shift(request[USER_ID], request[START_SHIFT])
                         else:
-                            self.database.update_user_shift(request['USER_ID'], request['START_SHIFT'])
+                            self.database.update_user_shift(request[USER_ID], request[START_SHIFT])
                     else:
-                        self.database.create_user_shift(request['USER_ID'],
-                                                        request['START_SHIFT'])
-                elif ACTION in request and request[ACTION] == 'GET_USER_SHIFT':
-                    user_shift = self.database.get_user_shift(request['USER_ID'])
+                        self.database.create_user_shift(request[USER_ID],
+                                                        request[START_SHIFT])
+                elif ACTION in request and request[ACTION] == GET_USER_SHIFT:
+                    user_shift = self.database.get_user_shift(request[USER_ID])
                     print(user_shift)
-                    await self.refresh_elements_no_content('GET_USER_SHIFT',
-                                                           user_shift if user_shift else {'user_id': request['USER_ID'], 'start_shift': int(time.time() * 1000)})
-                elif ACTION in request and request[ACTION] == 'USER_LOGOUT':
-                    user_log = self.database.user_logout(request['EMAIL'], str(id(websocket)))
+                    await self.refresh_elements_no_content(GET_USER_SHIFT,
+                                                           user_shift if user_shift else {
+                                                               'user_id':
+                                                                   request[
+                                                                       USER_ID],
+                                                               'start_shift': int(
+                                                                   time.time() * 1000)})
+                elif ACTION in request and request[ACTION] == USER_LOGOUT:
+                    user_log = self.database.user_logout(request[EMAIL], str(id(websocket)))
 
                     if user_log['user_count'] == 1:
                         print(user_log, 'user_log')
-                        await self.refresh_elements_no_content('USER_LOGOUT',
+                        await self.refresh_elements_no_content(USER_LOGOUT,
                                                                user_log['data'])
-                elif ACTION in request and request[ACTION] == 'CHECK_AUTHENTICATION':
-                    user = self.database.get_user_for_authentication(request[EMAIL], request['PASSWORD'])
+                elif ACTION in request and request[ACTION] == CHECK_AUTHENTICATION:
+                    user = self.database.get_user_for_authentication(request[EMAIL], request[PASSWORD])
                     print(user, 'AUTHENTICATE')
                     email = getattr(user, 'email', None)
                     ids = getattr(user, 'id', None)
-                    await self.refresh_elements_no_content('CHECK_AUTHENTICATION',
+                    await self.refresh_elements_no_content(CHECK_AUTHENTICATION,
                                                            {
                                                                'email': email,
                                                                'id': ids,
                                                            })
-                elif ACTION in request and request[ACTION] == 'SEND_MESSAGE_TO_MAIL':
+                elif ACTION in request and request[ACTION] == SEND_MESSAGE_TO_MAIL:
                     emails = [request[EMAIL]]
                     my_text = "<html>" \
                               "<head></head>" \
@@ -883,15 +909,20 @@ class Server:
                     SMTP.send_message(
                         'Успешная регистрация в приложении NSClean',
                         my_text.format(request[SURNAME], request[NAME], request[LASTNAME],
-                                       request[EMAIL], request['PASSWORD'], request['START_SHIFT']),
+                                       request[EMAIL], request[PASSWORD], request[START_SHIFT]),
                         emails)
-                elif ACTION in request and request[ACTION] == 'EDIT_BYPASSRANK_AND_IMAGE':
-                    print(len(request['PATH']), 'len of path')
+                elif ACTION in request and request[ACTION] == EDIT_BYPASSRANK_AND_IMAGE:
+                    print(len(request[PATH]), 'len of path')
                     try:
-                        for el in request['PATH']:
-                            self.path_img = self.get_bypass_path(request['BYPASS_ID'], request['BYPASS_RANK_ID'], el['id'])
+                        for el in request[PATH]:
+                            self.path_img = self.get_bypass_path(
+                                request[BYPASS_ID],
+                                request[BYPASS_RANK_ID], el['id'])
                             await self.create_image_file(el['image'])
-                            self.database.create_photo_rank_gallery(el['id'], request['BYPASS_RANK_ID'], self.path_img)
+                            self.database.create_photo_rank_gallery(el['id'],
+                                                                    request[
+                                                                        BYPASS_RANK_ID],
+                                                                    self.path_img)
                         self.database.update_bypass_rank(
                             request[COMPONENT_RANK_ID], request[BYPASS_RANK_ID],
                             request[END_TIME], True)
@@ -900,36 +931,95 @@ class Server:
                 elif ACTION in request and request[ACTION] == 'GET_IMAGE_FOR_BYPASS_COUNT':
                     images_count = self.database.get_photo_rank_gallery_count(request[BYPASS_RANK_ID])
                     send_length = {
-                        ACTION: 'GET_BYPASS_RANK_IMAGE_COUNT',
+                        ACTION: GET_BYPASS_RANK_IMAGE_COUNT,
                         'LENGTH': images_count
                     }
                     await send_msg(websocket,
                                    await self.process_client_message(send_length))
 
-                elif ACTION in request and request[ACTION] == 'GET_IMAGE_FOR_BYPASS':
+                elif ACTION in request and request[ACTION] == GET_IMAGE_FOR_BYPASS:
                     images = self.database.get_photo_rank_gallery(request[BYPASS_RANK_ID],
-                                                                  request['LIMIT'],
-                                                                  request['OFFSET'])
+                                                                  request[LIMIT],
+                                                                  request[OFFSET])
                     photo_dict = {
-                        ACTION: 'GET_IMAGE_FOR_BYPASS',
+                        ACTION: GET_IMAGE_FOR_BYPASS,
                         BYPASS_RANK_ID: request[BYPASS_RANK_ID],
-                        'CONTENT': self.get_content_list(images)
+                        CONTENT: self.get_content_list(images)
                     }
                     print(photo_dict)
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        photo_dict))
-                elif ACTION in request and request[ACTION] == 'GET_SINGLE_USER_STAT':
-                    user_stat = self.database.get_response_for_universal_query(request['USER_ID'])
+                elif ACTION in request and request[ACTION] == GET_SINGLE_USER_STAT:
+                    user_stat = self.database.get_response_for_universal_query(request[USER_ID])
                     stat_dict = {
-                        ACTION: 'GET_SINGLE_USER_STAT',
+                        ACTION: GET_SINGLE_USER_STAT,
                         MESSAGE: user_stat
                     }
                     with open('testik.txt', 'w', encoding='utf-8') as f:
                         f.write(str(user_stat))
                     await send_msg(websocket,
                                    await self.process_client_message(stat_dict))
+                elif ACTION in request and request[ACTION] == GET_USERS_BASIC_STAT:
 
+                    users_basic_stat = self.database.get_status_user_basic(
+                        None,
+                        request[START_TIME],
+                        request[END_TIME])
+                    user_basic_dict = {
+                        ACTION: GET_USERS_BASIC_STAT,
+                        MESSAGE: users_basic_stat
+                    }
+                    with open('include_stat_user.txt', 'w',
+                              encoding='utf-8') as f:
+                        f.write(str(user_basic_dict))
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       user_basic_dict))
+                elif ACTION in request and request[ACTION] == GET_LIST_USERS_AVERAGE_FOR_POST:
+                    users_stat_avg = self.database.get_list_users_average_for_post(
+                        request[PERIOD],
+                        request[START_TIME],
+                        request[END_TIME],
+                        request[POST_NAME]
+                    )
+                    user_stat_avg_dict = {
+                        ACTION: GET_LIST_USERS_AVERAGE_FOR_POST,
+                        MESSAGE: users_stat_avg
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       user_stat_avg_dict))
+                elif ACTION in request and request[ACTION] == \
+                        'GET_STATUS_USER_WITH_TBR':
+                    users_stat = self.database.get_status_user_with_tbr(
+                        request[PERIOD],
+                        request[BUILDING_ID]
+                    )
+                    users_stat_dict = {
+                        ACTION: 'GET_STATUS_USER_WITH_TBR',
+                        MESSAGE: users_stat
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       users_stat_dict))
+                elif ACTION in request and request[ACTION] == \
+                    'GET_STATUS_USER_WITH_TBR_DETAIL':
+
+                    user_stat_detail = self.database.\
+                        get_status_user_with_tbr_detail(
+                            request[PERIOD], 
+                            request[USER_ID], 
+                            request[BUILDING_ID],
+                            request[START_TIME], request[END_TIME])
+                    user_stat_detail_dict = {
+                        ACTION: 'GET_STATUS_USER_WITH_TBR_DETAIL',
+                        MESSAGE: user_stat_detail
+                    }
+
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       user_stat_detail_dict))
         finally:
             await self.unregister(websocket)
 
