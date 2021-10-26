@@ -5,6 +5,7 @@ from sqlalchemy import Column, BigInteger, Boolean, Integer, String, Text, Forei
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.orm import scoped_session
+from sqlalchemy.dialects.postgresql import BIGINT
 from sqlalchemy.sql import text
 from sqlalchemy_views import CreateView
 from time import time
@@ -12,6 +13,7 @@ import random
 from server.database.query_text.queries import *
 from server.database.query_text.view import view_create, view_drop, view_create_detail, view_drop_detail
 from server.utilities.helper_functions.get_today import get_today, get_start_day
+from server.utilities.helper_functions.get_start_end_time import get_start_end_time
 STOP_BYPASS = 3600
 
 class MainDataBase:
@@ -320,7 +322,7 @@ class MainDataBase:
         create_date_row = Column(Date, nullable=False)
 
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.10:5480/postgres', pool_recycle=7200)
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.13:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
@@ -1097,10 +1099,110 @@ class MainDataBase:
         """
         
         :param bypass_rank_id: 
-        :return: 
+        :return: int
         """
         return self.session.query(self.PhotoRankGallery).filter_by(
             bypass_rank_id=bypass_rank_id).count()
+
+    def get_photo_rank_gallery_count_user_post(self, period,
+                                               component_id,
+                                               post_id,
+                                               email,
+                                               start_time=None,
+                                               end_time=None) -> int:
+        """
+
+        :param start_time:
+        :param end_time:
+        :param component_id:
+        :param post_id:
+        :param email:
+        :return: list
+        """
+        start_time_str, end_time_str = get_start_end_time(period, start_time,
+                                                          end_time)
+
+        return len(self.session.execute(QUERY_GET_PHOTO_FOR_USER_OF_POST.format(
+            component_id,
+            post_id,
+            email,
+            start_time_str,
+            end_time_str,
+            'null',
+            'null'
+        )).all())
+
+    def get_photo_user_of_post(self, period, component_id, post_id, email,
+                               limit,
+                               offset,
+                               start_time=None,
+                               end_time=None):
+        """
+
+        :param period:
+        :param component_id:
+        :param post_id: 
+        :param email: str
+        :param limit:
+        :param offset:
+        :param start_time:
+        :return: list
+        """
+        start_time_str, end_time_str = get_start_end_time(period, start_time,
+                                                          end_time)
+
+        return self.get_photo_rank_gallery_user_post(start_time_str,
+                                                     end_time_str,
+                                                     component_id,
+                                                     post_id,
+                                                     email,
+                                                     limit,
+                                                     offset)
+
+    def get_photo_rank_gallery_user_post(self,
+                                         start_time,
+                                         end_time,
+                                         component_id,
+                                         post_id,
+                                         email,
+                                         limit,
+                                         offset) -> list:
+        """
+
+        :param start_time:
+        :param end_time:
+        :param component_id:
+        :param post_id:
+        :param email:
+        :param limit:
+        :param offset:
+        :return:
+        """
+        query = self.session.execute(QUERY_GET_PHOTO_FOR_USER_OF_POST.format(
+            component_id,
+            post_id,
+            email,
+            start_time,
+            end_time,
+            limit,
+            offset
+        ))
+        return [
+            {
+                'component_id': el.component_id,
+                'image': el.image,
+                'email': el.email,
+                'surname': el.surname,
+                'name': el.name,
+                'lastname': el.lastname,
+                'bypass_rank_id': el.bypass_rank_id,
+                'time_make_photo': el.time_ms_make_photo,
+                'temperature': el.temperature,
+                'weather': el.weather,
+                'icon': el.icon
+
+            } for el in query
+        ]
 
     def get_photo_rank_gallery(self, bypass_rank_id, limit, offset) -> list:
         """
@@ -1382,9 +1484,6 @@ class MainDataBase:
                 USERS_LIST_VIEW_YEAR
             )
         if period == 'day':
-            print(get_start_day(start_time))
-            print('----------')
-            print(start_time)
             return self.get_list_users_detail(
                 round(start_time),
                 round(start_time + TAIL_TODAY),
@@ -1412,9 +1511,10 @@ class MainDataBase:
             start_time_str = start_time
             end_time_str = start_time + 86400000
 
-        query = USERS_LIST_QUERY_AVG.format(f"'{post_name}'")
-        create_view = USERS_LIST_VIEW % (start_time_str, end_time_str)
-        qrt = self.create_remove_view_detail(create_view, query)
+        query = USERS_LIST_QUERY_AVG.format(start_time_str, end_time_str, f"'{post_name}'")
+        # create_view = USERS_LIST_VIEW % (start_time_str, end_time_str)
+        # qrt = self.create_remove_view_detail(create_view, query)
+        qrt = self.engine.execute(query).all()
         print(str(qrt), 'This are users of detail info')
         email_tmp = 0
         temp_list = []
@@ -1424,6 +1524,7 @@ class MainDataBase:
             if email_tmp == qrt[idx][0]:
                 print('id_temp equal bypass_id')
                 my_dicts[str(qrt[idx][9])] = qrt[idx][2]
+                my_dicts[str(qrt[idx][9]) + 'count_bad_rank'] = qrt[idx][11]
                 my_dicts[str(qrt[idx][9]) + '_rank'] = 0 if qrt[idx][3] is None else float(qrt[idx][3])
                 print(my_dicts, 'my_dicts')
             if not email_tmp:
@@ -1439,7 +1540,8 @@ class MainDataBase:
                     'count_bypass': qrt[idx][6],
                     'cleaner': None if qrt[idx][7] is None else qrt[idx][7],
                     'time_bbb': None if qrt[idx][8] is None else int(qrt[idx][8]),
-                    'post_id': qrt[idx][9]
+                    'post_id': qrt[idx][10],
+                    str(qrt[idx][9]) + 'count_bad_rank': qrt[idx][11]
                 }
                 email_tmp = qrt[idx][0]
             if email_tmp != qrt[idx][0] and email_tmp or (len(qrt) - 1 == idx):
@@ -1456,14 +1558,13 @@ class MainDataBase:
                     'count_bypass': qrt[idx][6],
                     'cleaner': None if qrt[idx][7] is None else qrt[idx][7],
                     'time_bbb': None if qrt[idx][8] is None else int(qrt[idx][8]),
-                    'post_id': qrt[idx][9]
+                    'post_id': qrt[idx][10],
+                    str(qrt[idx][9]) + 'count_bad_rank': qrt[idx][11]
                 }
                 if idx == len(qrt) - 1 and qrt[idx][0] != qrt[idx - 1][0]:
                     temp_list.append(my_dicts)
                 print(my_dicts)
             email_tmp = qrt[idx][0]
-            with open('text-test.txt', 'w', encoding='utf-8') as f:
-                f.write(str(temp_list))
         return temp_list
 
     def get_list_users_detail_week_month(self, start_time, end_time, post_name,
@@ -1923,6 +2024,7 @@ class MainDataBase:
                 print('user_id_temp equal user_id & post_id_temp equal post_id')
                 my_dicts[str(qrt[idx][3])] = qrt[idx][9]
                 my_dicts[str(qrt[idx][3]) + '_rank'] = float(qrt[idx][11])
+                my_dicts[str(qrt[idx][3]) + 'count_bad_rank'] = float(qrt[idx][17])
                 print(my_dicts, 'my_dicts')
             if not post_id_temp:
                 print('no id_temp')
@@ -1938,6 +2040,7 @@ class MainDataBase:
                     'post_name': qrt[idx][8],
                     str(qrt[idx][3]): qrt[idx][9],
                     str(qrt[idx][3]) + '_rank': float(qrt[idx][11]),
+                    str(qrt[idx][3]) + 'count_bad_rank': qrt[idx][17],
                     'avg_rank_post': float(qrt[idx][10]),
                     'count_bypass': qrt[idx][12],
                     'cleaner': qrt[idx][13],
@@ -1963,6 +2066,7 @@ class MainDataBase:
                     'post_name': qrt[idx][8],
                     str(qrt[idx][3]): qrt[idx][9],
                     str(qrt[idx][3]) + '_rank': float(qrt[idx][11]),
+                    str(qrt[idx][3]) + 'count_bad_rank': qrt[idx][17],
                     'avg_rank_post': float(qrt[idx][10]),
                     'count_bypass': qrt[idx][12],
                     'cleaner': qrt[idx][13],
@@ -2078,6 +2182,17 @@ if __name__ == '__main__':
 
     print('----------')
     end_time = get_today() + TAIL_TODAY
-    print(
-        json.dumps(server.get_list_users_average_for_post(1629752400000, end_time, 'мрт'), indent=4, ensure_ascii=False))
+    # print(
+    #     json.dumps(server.get_list_users_average_for_post(1629752400000, end_time, 'мрт'), indent=4, ensure_ascii=False))
     # server.engine.execute(USERS_LIST_QUERY_AVG.format('мрт')).all()
+
+    print(server.get_photo_user_of_post('month',
+                                        1625706704854,
+                                        1625941962224,
+                                        r"'borisostroumov@gmail.com'",
+                                        1,
+                                        0))
+    print(server.get_photo_rank_gallery_count_user_post('month',
+                                                        1625706704854,
+                                                        1625941962224,
+                                                        r"'borisostroumov@gmail.com'"))

@@ -129,6 +129,8 @@ class Server:
             response = request
         elif ACTION in request and request[ACTION] == 'GET_STATUS_USER_WITH_TBR_DETAIL':
             response = request
+        elif ACTION in request and request[ACTION] == 'GET_IMAGE_BYPASS_USER_OF_POST_COUNT':
+            response = request
         else:
             response = {RESPONSE: ERROR}
             log.error(request)
@@ -928,6 +930,44 @@ class Server:
                             request[END_TIME], True)
                     except:
                         pass
+
+                elif ACTION in request and request[ACTION] == \
+                        'GET_IMAGE_BYPASS_USER_OF_POST_COUNT':
+                    images_count = self.database.\
+                        get_photo_rank_gallery_count_user_post(
+                            request[PERIOD],
+                            int(request[COMPONENT_ID]),
+                            request[POST_ID],
+                            f"'{request[EMAIL]}'",
+                            request[START_TIME],
+                            request[END_TIME])
+                    send_length = {
+                        ACTION: 'GET_IMAGE_BYPASS_USER_OF_POST_COUNT',
+                        'LENGTH': images_count
+                    }
+                    print(json.dumps(send_length, indent=4, ensure_ascii=False))
+                    await send_msg(websocket,
+                                   await self.process_client_message(send_length))
+                elif ACTION in request and request[ACTION] == 'GET_IMAGE_BYPASS_USER_OF_POST':
+                    images = self.\
+                        database.get_photo_user_of_post(request[PERIOD],
+                                                    int(request[COMPONENT_ID]),
+                                                    request[POST_ID],
+                                                    f"'{request[EMAIL]}'",
+                                                    request[LIMIT],
+                                                    request[OFFSET],
+                                                    request[START_TIME],
+                                                    request[END_TIME])
+                    photo_dict = {
+                        ACTION: GET_IMAGE_FOR_BYPASS,
+                        BYPASS_RANK_ID: request[COMPONENT_ID],
+                        CONTENT: self.get_content_list(images),
+                        'DATA': images
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       photo_dict))
+
                 elif ACTION in request and request[ACTION] == 'GET_IMAGE_FOR_BYPASS_COUNT':
                     images_count = self.database.get_photo_rank_gallery_count(request[BYPASS_RANK_ID])
                     send_length = {

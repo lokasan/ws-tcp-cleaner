@@ -12,5 +12,10 @@ def get_today() -> int:
 
 
 def get_start_day(start_time) -> int:
-    return start_time - start_time % (24 * 60 * 60 * 1000)
+    """
 
+    :param start_time: 
+    :return int:
+    """
+    return int(start_time) - int(start_time) % \
+        (24 * 60 * 60 * 1000) - (3 * 60 * 60 * 1000)

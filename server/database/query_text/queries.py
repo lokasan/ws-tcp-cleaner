@@ -26,16 +26,19 @@ POSTS_LIST_VIEW = 'select (select bypass.id from bypass limit 1) ident, building
         'WHERE b.finished=1 and b.start_time::bigint > {0} and b.end_time::bigint <= {1}'\
         'GROUP BY p.id, c.id, building_name;'
 
-USERS_LIST_VIEW = "select p.id post_id, u.surname, u.name, " \
-    "u.lastname, b.id, building.name building_name, p.name post_name, c.name component_name, " \
-    "AVG(cr.rank::decimal) rank, SUM(DISTINCT b.end_time::bigint - b.start_time::bigint) time_bypasses, " \
-    "COUNT(DISTINCT  b.id) count_bypass, u.email as email, cleaner, b.start_time, b.end_time, cr.component_id, to_timestamp(((3 * 60 * 60 * 1000) + b.end_time::bigint) / 1000.0)::date as anchor, avg(b.temperature) temperature from building left join post p " \
-    "on building.id = p.building_id left join bypass b on p.id = b.post_id " \
-    "left join bypass_rank br on b.id = br.bypass_id left join component_rank " \
-    "cr on br.component_rank_id = cr.id left join component c " \
-    "on br.component_id = c.id left join public.user u on b.user_id = u.id " \
-    "WHERE b.finished=1 and b.end_time::bigint > %d and b.end_time::bigint <= %d " \
-    "GROUP BY u.id, p.id, c.id, b.id, building_name, cr.component_id;"
+USERS_LIST_VIEW = """
+select distinct p.id post_id, u.surname, u.name, 
+    u.lastname, b.id, building.name building_name, p.name post_name, c.name component_name, 
+    AVG(cr.rank::decimal) rank, SUM(DISTINCT b.end_time::bigint - b.start_time::bigint) time_bypasses, 
+    COUNT(DISTINCT  b.id) count_bypass, u.email as email, cleaner, b.start_time, b.end_time, cr.component_id, to_timestamp(b.end_time::bigint / 1000.0)::date as anchor, avg(b.temperature) temperature, max(us.create_date) over(partition by b.id) as create_date from building left join post p
+    on building.id = p.building_id left join bypass b on p.id = b.post_id 
+    left join bypass_rank br on b.id = br.bypass_id left join component_rank 
+    cr on br.component_rank_id = cr.id left join component c 
+    on br.component_id = c.id left join public.user u on b.user_id = u.id 
+    left join user_shift us on us.create_date::bigint < b.start_time::bigint
+    WHERE b.finished=1 and b.end_time::bigint > %d and b.end_time::bigint <= %d 
+    GROUP BY u.id, p.id, c.id, b.id, building_name, cr.component_id, us.create_date
+"""
 
 USERS_LIST_VIEW_YEAR = "select p.id post_id, u.surname, u.name, " \
     "u.lastname, b.id, building.name building_name, p.name post_name, c.name component_name, " \
@@ -48,26 +51,69 @@ USERS_LIST_VIEW_YEAR = "select p.id post_id, u.surname, u.name, " \
     "WHERE b.finished=1 and b.end_time::bigint > %d and b.end_time::bigint <= %d " \
     "GROUP BY u.id, p.id, c.id, b.id, building_name, cr.component_id;"
 
-USERS_LIST_QUERY_AVG = "with table_help as( " \
-"select " \
-	"test_table.email, " \
-	"post_name, " \
-	"component_name, " \
-	"round(avg(rank), 1) avg_component, " \
-	"round(avg_rank, 1) avg_rank, " \
-	"t_v2.time_bypasses, " \
-	"t_v2.count_bypass, " \
-	"is_cleaner_for_bp.percent_cleaner, " \
-	"avg(distinct bbb) as bp_by_bp, " \
-	"component_id, " \
-	"post_id " \
-"from (select *, avg(rank) over(partition by email) avg_rank, abs(start_time::bigint - lag(end_time::bigint) over(partition by email, component_name, anchor order by id)) as bbb from temporary_view_detail where post_name = {0}) as test_table " \
-"left join (select email, count(distinct id) count_bypass, sum(DISTINCT time_bypasses::bigint) as time_bypasses from temporary_view_detail where post_name = {0} group by email) as t_v2 on t_v2.email = test_table.email " \
-"left join (select email, round((sum(cleaner)::float / count(distinct id)::float)::float * 100)::text || '%%' as percent_cleaner from (select email, id, cleaner from temporary_view_detail where post_name = {0} group by id, email, cleaner) as c_cleaner group by email) as is_cleaner_for_bp on test_table.email = is_cleaner_for_bp.email " \
-"group by test_table.email, avg_rank, component_name, post_name, component_id, post_id, t_v2.count_bypass, t_v2.time_bypasses, is_cleaner_for_bp.percent_cleaner), " \
-"result_table as ( " \
-"select email, post_name, component_name, avg_component, avg_rank, time_bypasses, count_bypass, percent_cleaner, avg(bp_by_bp) over(partition by email) bp_by_bp, component_id, post_id from table_help) " \
-"select * from result_table;"
+USERS_LIST_QUERY_AVG = """
+with 
+test_users_list as (select distinct p.id post_id, u.surname, u.name, 
+    u.lastname, b.id, building.name building_name, p.name post_name, c.name component_name, 
+    AVG(cr.rank::decimal) rank, SUM(DISTINCT b.end_time::bigint - b.start_time::bigint) time_bypasses, 
+    COUNT(DISTINCT  b.id) count_bypass, u.email as email, cleaner, b.start_time, b.end_time, cr.component_id, to_timestamp(((3 * 60 * 60 * 1000) + b.end_time::bigint) / 1000.0)::date as anchor, avg(b.temperature) temperature, max(us.create_date) over(partition by b.id) as create_date from building left join post p
+    on building.id = p.building_id left join bypass b on p.id = b.post_id 
+    left join bypass_rank br on b.id = br.bypass_id left join component_rank 
+    cr on br.component_rank_id = cr.id left join component c 
+    on br.component_id = c.id left join public.user u on b.user_id = u.id 
+    left join user_shift us on us.create_date::bigint < b.start_time::bigint
+    WHERE b.finished=1 and b.end_time::bigint > {0} and b.end_time::bigint <= {1} 
+	and p."name" = {2}
+    GROUP BY u.id, p.id, c.id, b.id, building_name, cr.component_id, us.create_date),
+table_main as (
+select post_id, surname, "name", lastname, test_users_list.id, building_name, post_name, component_name, "rank", time_bypasses, count_bypass, email, cleaner, start_time, end_time, component_id, anchor, temperature, test_users_list.create_date, anchor + to_timestamp(us.start_shift::bigint /1000.0)::time start_shift  from test_users_list
+	left join user_shift us on us.create_date = test_users_list.create_date
+),
+pre_help as (
+	select *, abs(start_time::bigint - lag(end_time::bigint) over(partition by email, component_name, anchor order by id)) as bbb from table_main where post_name = {2}
+),
+table_with_start_shift as (
+	select post_id, surname, "name", lastname, id, building_name, post_name, component_name, "rank", time_bypasses, count_bypass, email, cleaner, start_time, end_time, component_id, anchor, temperature, create_date, start_shift, case when bbb is null then abs((extract(epoch from start_shift) * 1000 - start_time::bigint)) else bbb end as time_bbb from pre_help
+),
+output_avg_bbb as (
+select post_id, surname, "name", lastname, id, building_name, post_name, component_name, avg("rank") over(partition by email) as avg_rank, avg("rank") over(partition by email, component_name) as avg_component, sum(time_bypasses) over(partition by email, component_name) as time_bypasses, count(count_bypass) over(partition by email, component_name) as count_bypass, email, (sum(cleaner::float) over(partition by email, component_name) / count(id::float) over(partition by email, component_name) * 100) as percent_cleaner, start_time, end_time, component_id, anchor, avg(temperature) over(partition by email, component_name) as temperature, create_date, start_shift, avg(time_bbb) over(partition by email) as bbb from table_with_start_shift
+),
+output_round_bb as (
+select post_id, surname, "name", lastname, id, building_name, post_name, component_name, round(avg_rank, 1) as avg_rank, round(avg_component, 1) as avg_component, time_bypasses, count_bypass, email, round(percent_cleaner)::text || '%%' as percent_cleaner, start_time, end_time, component_id, anchor, round(temperature::numeric) as avg_temperature, create_date, start_shift, round(bbb::numeric) as time_bbb from output_avg_bbb
+),
+output_pre_final as (
+	select
+		email,
+		post_name,
+		component_name,
+		avg_component,
+		avg_rank,
+		time_bypasses,
+		count_bypass,
+		percent_cleaner,
+		time_bbb as bp_by_bp,
+		component_id,
+		post_id,
+		count(*)
+	from output_round_bb
+	group by email, post_name, component_name,
+		avg_component,
+		avg_rank,
+		time_bypasses,
+		count_bypass,
+		percent_cleaner,
+		bp_by_bp,
+		component_id,
+		post_id
+),
+table_help as (select c.id as component_id, cr.id as component_rank_id_help, "rank" all_rank from component as c left join component_rank as cr on c.id = cr.component_id),
+pre_result as (select tul.email, tul.id, tul.component_id, min(all_rank) as "rank" from test_users_list as tul left join table_help th on th.component_id = tul.component_id
+and tul.id > component_rank_id_help 
+group by tul.id, tul.component_id, email),
+clear_best_single_rank as (select * from pre_result where "rank"::float != 5.0),
+final_res as (select email, b.id, br.component_id, br.component_rank_id, cr."rank", cbsr."rank", case when cr."rank" = cbsr."rank" then 1 else 0 end as is_minimal_rank from bypass b left join bypass_rank br on br.bypass_id = b.id left join component_rank cr on br.component_rank_id = cr.id join clear_best_single_rank cbsr on cbsr.id = b.id and cbsr.component_id = br.component_id where b.finished = 1),
+is_min_rank as (select email, component_id, sum(is_minimal_rank) as count_bad_rank_component from final_res group by email, component_id)
+select opf.email, post_name, component_name, avg_component, avg_rank, time_bypasses, count_bypass, percent_cleaner, bp_by_bp, opf.component_id, post_id, count_bad_rank_component from output_pre_final opf left join is_min_rank imr on imr.email = opf.email and opf.component_id = imr.component_id;"""
 
 USERS_LIST_QUERY_AVG_MONTH_WEEK = "with users_detail_month_week as ( " \
 "select " \
@@ -546,7 +592,7 @@ left join "user" on "user".id = bypass.user_id
 left join component_rank cr on cr.id = bypass_rank.component_rank_id 
 left join component on component.id = cr.component_id 
 left join user_shift on user_shift.user_id = "user".id and user_shift.create_date::bigint < bypass.start_time::bigint
-where bypass.user_id = {0} and bypass.finished = 1 and building_id = {1} and bypass.end_time::bigint >= {2} and bypass.end_time::bigint <= {3} 
+where bypass.user_id = {0} and bypass.finished = 1 and building_id = {1} and bypass.end_time::bigint >= {2} and bypass.end_time::bigint <= {3}  
 ),
 bypass_with_lag as (
  select distinct on (bypass_rank_id) user_bypass.user_id, building_id, post_id, bypass_id, component_id, component_rank_id, bypass_rank_id, surname, user_name, lastname, email, post_name, component_name, component_rank_name, component_rank_rank, end_time, start_time, time_bypasses, coalesce(abs(user_bypass.start_time::bigint - lag(user_bypass.end_time::bigint) over(partition by user_bypass.user_id, post_id, anchor order by bypass_id)), 0) as bp_by_bp, anchor + to_timestamp(us.start_shift::bigint /1000.0)::time start_shift_date, cleaner, temperature  from user_bypass, user_shift us 
@@ -579,9 +625,39 @@ where us.create_date = user_bypass.create_date
   final_compressed_user_post_stat as (
   select user_id, building_id, post_id, component_id, surname, user_name, lastname, email, post_name, component_name, avg_rank_post, avg_rank_component, count_bypass, percent_cleaner, time_bypasses, avg_bp_by_bp, comp_post_stat.avg_temperature from compressed_user_post_stat cups left join (select user_id as user_ids, post_id as post_ids, count(distinct bypass_id) count_bypass, 
  round((sum(cleaner)::float / count(bypass_id)::float)::float * 100)::text || '%%' as percent_cleaner, sum(time_bypasses) time_bypasses, round(avg(bp_by_bp)) as avg_bp_by_bp, round(avg(component_rank_rank::decimal), 2) avg_rank_post, round(avg(temperature::decimal)) as avg_temperature from pre_result group by user_id, post_id) as comp_post_stat on comp_post_stat.user_ids = cups.user_id and comp_post_stat.post_ids = cups.post_id order by user_id, post_id
-  )
-  select * from final_compressed_user_post_stat;
+  ),
+  table_help as (select c.id as component_id, cr.id as component_rank_id_help, "rank" all_rank from component as c left join component_rank as cr on c.id = cr.component_id),
+pre_results as (select tul.email, tul.bypass_id, tul.component_id, min(all_rank) as "rank" from user_bypass as tul left join table_help th on th.component_id = tul.component_id
+and tul.bypass_id > component_rank_id_help 
+group by tul.bypass_id, tul.component_id, email),
+clear_best_single_rank as (select * from pre_results where "rank"::float != 5.0),
+final_res as (select email, b.id, br.component_id, br.component_rank_id, cr."rank", cbsr."rank", case when cr."rank" = cbsr."rank" then 1 else 0 end as is_minimal_rank from bypass b left join bypass_rank br on br.bypass_id = b.id left join component_rank cr on br.component_rank_id = cr.id join clear_best_single_rank cbsr on cbsr.bypass_id = b.id and cbsr.component_id = br.component_id where b.finished = 1),
+is_min_rank as (select email, component_id, sum(is_minimal_rank) as count_bad_rank_component from final_res group by email, component_id)
+select user_id, building_id, post_id, fcups.component_id, surname, user_name, lastname, fcups.email, post_name, component_name, avg_rank_post, avg_rank_component, count_bypass, percent_cleaner, time_bypasses, avg_bp_by_bp, avg_temperature, count_bad_rank_component from final_compressed_user_post_stat fcups left join is_min_rank imr on imr.email = fcups.email and fcups.component_id = imr.component_id;
 '''
+
+QUERY_GET_PHOTO_FOR_USER_OF_POST = '''with pre_res as (select b.id as bypass_id, b.user_id, 
+        b.post_id,  
+        b.weather, 
+        b.temperature, 
+        b.icon, 
+        br.id as bypass_rank_id, 
+        br.component_id, 
+        br.component_rank_id, 
+        prg.image,
+        u.email,
+        u.surname,
+        u."name",
+        u.lastname,
+       	cr."rank" fact_rank,
+       	cr.id as component_rank_id_actual,
+       	prg.id as time_ms_make_photo,
+       	min(cr."rank") over(partition by br.component_rank_id) min_rank
+        from bypass b left join bypass_rank br on br.bypass_id = b.id left join "user" u on u.id = b.user_id left join photo_rank_gallery prg on prg.bypass_rank_id = br.id left join component_rank cr on cr.component_id = br.component_id
+        where is_image = true and bypass_id >  cr.id and  br.component_id = {0} and b.post_id = {1} and u.email = {2} and b.end_time::bigint >= {3} and b.end_time::bigint <= {4}),
+res as (select * from pre_res where fact_rank = min_rank)
+select * from res where component_rank_id = component_rank_id_actual and min_rank != '5.0' order by time_ms_make_photo desc limit {5} offset {6};'''
+
 from time import time
 STATIC_DAY = int(time() * 1000) % 86400000
 TODAY_MILLISECONDS = 0
