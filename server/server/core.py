@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import pathlib
 import json
 import logging
 import os
@@ -8,9 +9,10 @@ import sys
 import time
 import ssl
 import aiofiles
+import re
 from send_mail.modules.SMTPClient import SMTPClient
 import websockets
-
+import redis
 from JIM.config import *
 from JIM.utils import send_msg
 from server.database.database import MainDataBase
@@ -25,8 +27,11 @@ class Server:
         super().__init__()
         self.clients = []
         self.database = MainDataBase()
+        self.red = redis.Redis(host='192.168.1.6')
         self.path_img = ''
         self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.ssl_context.load_cert_chain(pathlib.Path(__file__).
+                                         with_name('cleanCert.pem'))
         self.address = listen_address
         self.port = listen_port
         self.running = True
@@ -57,6 +62,9 @@ class Server:
             response = request
         elif ACTION in request and request[ACTION] == \
                 GET_POSTS:
+            response = request
+        elif ACTION in request and request[ACTION] == \
+            'GET_ALL_POSTS_FROM_SERVER':
             response = request
         elif ACTION in request and request[ACTION] == \
                 GET_COMPONENTS:
@@ -131,6 +139,8 @@ class Server:
             response = request
         elif ACTION in request and request[ACTION] == 'GET_IMAGE_BYPASS_USER_OF_POST_COUNT':
             response = request
+        elif ACTION in request and request[ACTION] == 'GET_STATUS_COMPONENT_FOR_BUILDING':
+            response = request
         else:
             response = {RESPONSE: ERROR}
             log.error(request)
@@ -141,7 +151,9 @@ class Server:
         if not os.path.exists(self.path_img.rsplit(os.sep, 1)[0]):
             os.makedirs(self.path_img.rsplit(os.sep, 1)[0])
         async with aiofiles.open(self.path_img, 'wb') as f:
-            await f.write(base64.b64decode(file[23:].encode('utf-8')))
+            print('GET BASE CODE', file[:24].encode('utf-8'))
+            decoding_file = file.split(',', 1)[-1]
+            await f.write(base64.b64decode(decoding_file.encode('utf-8')))
 
     async def refresh_elements_no_content(self, action, elements):
         for ws in self.clients:
@@ -237,26 +249,36 @@ class Server:
             f"{os.sep}{msg[NAME_FILE]}"
 
     @staticmethod
-    def get_bypass_path(bypass_id, bypass_rank_id, file_name):
+    def get_bypass_path(bypass_id, bypass_rank_id, file_name, ext='.jpeg'):
         return os.path.join(os.path.normpath(
             os.path.dirname(os.path.abspath(
                 __file__)) + os.sep + os.pardir),
             f'images{os.sep}' + 'bypass' + os.sep + str(
                 bypass_id) + os.sep + 'bypass_rank' + os.sep + str(
-                bypass_rank_id) + os.sep + str(file_name) + '.jpeg')
+                bypass_rank_id) + os.sep + str(file_name) + ext)
+
+    @staticmethod
+    def find_trash_symbols_info(text):
+        if re.search(r'[",\'\/\\*<>?:|]', text) is not None:
+            return None
 
     def get_full_path(self, request):
+        if self.find_trash_symbols_info(request[NAME]) is not None:
+            return None
         return os.path.join(os.path.normpath(
             os.path.dirname(os.path.abspath(
                 __file__)) + os.sep + os.pardir),
-            f'images{os.sep}' + self.configurate_path_img(request)) + '.jpeg'
+            f'images{os.sep}' + self.configurate_path_img(request)) + request['EXTENSIONS']
 
     def join_path(self, parent, msg, n_split):
         if msg[NAME_FILE]:
             return os.path.join(parent.rsplit(os.sep, n_split)[0],
-                                self.configurate_path_img(msg) + '.jpeg')
-        return os.path.join(parent.rsplit(os.sep, n_split)[0],
-                            msg[NAME] + os.sep + parent.rsplit(os.sep, 1)[-1])
+                                self.configurate_path_img(msg) + msg['EXTENSIONS'])
+        elif NAME in msg and self.find_trash_symbols_info(msg[NAME]) is None:
+            return os.path.join(parent.rsplit(os.sep, n_split)[0],
+                                msg[NAME] + os.sep + parent.rsplit(os.sep, 1)[-1])
+        else:
+            return None
 
     async def notify_user(self, status) -> None:
         if self.clients:
@@ -268,18 +290,23 @@ class Server:
 
     async def register(self, websocket) -> None:
         self.clients.append(websocket)
+        print('ALL CLIENTS: ', self.clients)
         await self.notify_user('подключился')
 
     async def unregister(self, websocket) -> None:
-        user = self.database.user_critical_logout(str(id(websocket)))
-        print(user, 'PRINTED')
-        print(user.__dict__, 'PRINTED')
-        self.clients.remove(websocket)
-        for client in self.clients:
-            await send_msg(client, await self.process_client_message(
-                {ACTION: REMOVE_ACTIVE_USER, MESSAGE: getattr(user, 'user_id', None)}))
-
-
+        user = {}
+        try:
+            user = self.database.user_critical_logout(str(id(websocket)))
+            print(user, 'PRINTED')
+            print(user.__dict__, 'PRINTED')
+        except Exception as e:
+            print(e)
+        finally:
+            self.clients.remove(websocket)
+            if 'user_count' in user and user['user_count'] == 1:
+                for client in self.clients:
+                    await send_msg(client, await self.process_client_message(
+                        {ACTION: REMOVE_ACTIVE_USER, MESSAGE: user['user_id']}))
 
         await self.notify_user('отключился')
 
@@ -290,7 +317,8 @@ class Server:
         # noinspection PyBroadException
         try:
             start_server = websockets.serve(self.hello, self.address,
-                                            self.port, max_size=1_000_000_000)
+                                            self.port,
+                                            max_size=1_000_000_000)
             loop = asyncio.get_event_loop()
             print(start_server)
 
@@ -321,7 +349,7 @@ class Server:
                     is_user_exists = self.database.get_user(request[EMAIL])
                     print(is_user_exists, ' Base')
                     print(request, 'user_request')
-                    if not is_user_exists:
+                    if self.path_img is not None and not is_user_exists:
                         self.database.create_user(request[ID],
                                                   request[SURNAME],
                                                   request[NAME],
@@ -341,26 +369,45 @@ class Server:
                     #                    {ACTION: GET_USER_IN_LOCAL_BASE,
                     #                     MESSAGE: is_user_exists if is_user_exists else request}))
                     log.info(request)
+                elif ACTION in request and request[ACTION] == ADD_CORPUS:
+                    self.path_img = self.get_full_path(request)
+                    # before how creating i need know about exists a corpus
+                    if self.path_img is not None:
+                        self.database.create_corpus(request['ID'],
+                                                    request[NAME],
+                                                    request[ADDRESS],
+                                                    request[DESCRIPTION],
+                                                    self.path_img,
+                                                    request[COORDS])
+                        await self.create_image_file(request['PATH'])
+                        request['image'] = self.path_img
+                        requests = dict(
+                            [[k.lower(), v] for k, v in request.items()]
+                        )
+                        request['PATH'] = 0
+                        added_element = list()
+                        added_element.append(requests)
 
                 elif ACTION in request and request[ACTION] == ADD_OBJECT:
                     self.path_img = self.get_full_path(request)
-                    self.database.create_building(request['ID'],
-                                                  request[NAME],
-                                                  request[ADDRESS],
-                                                  request[DESCRIPTION],
-                                                  self.path_img)
-                    await self.create_image_file(request['PATH'])
-                    request['image'] = self.path_img
-                    requests = dict(
-                        [[k.lower(), v] for k, v in request.items()])
-                    request['PATH'] = 0
-                    added_element = list()
-                    added_element.append(requests)
-                    # objects = self.database.get_buildings()
-                    # await self.refresh_elements(GET_OBJECTS_SYNCHRONIZE,
-                    #                             added_element,
-                    #                             removed_elements=[],
-                    #                             updated_elements=[])
+                    if self.path_img is not None:
+                        self.database.create_building(request['ID'],
+                                                      request[NAME],
+                                                      request[ADDRESS],
+                                                      request[DESCRIPTION],
+                                                      self.path_img)
+                        await self.create_image_file(request['PATH'])
+                        request['image'] = self.path_img
+                        requests = dict(
+                            [[k.lower(), v] for k, v in request.items()])
+                        request['PATH'] = 0
+                        added_element = list()
+                        added_element.append(requests)
+                        # objects = self.database.get_buildings()
+                        # await self.refresh_elements(GET_OBJECTS_SYNCHRONIZE,
+                        #                             added_element,
+                        #                             removed_elements=[],
+                        #                             updated_elements=[])
                     log.info(request)
 
                 elif ACTION in request and request[ACTION] == ADD_POST:
@@ -368,48 +415,50 @@ class Server:
                         int(request[BUILDING_ID]))
                     self.path_img = self.join_path(parent.image, request,
                                                    n_split=1)
-                    self.database.create_post(request['ID'],
-                                              request[BUILDING_ID],
-                                              request[NAME],
-                                              request[DESCRIPTION],
-                                              self.path_img,
-                                              request[QRCODE],
-                                              request[QRCODE_IMG])
-                    await self.create_image_file(request[PATH])
-                    request['image'] = self.path_img
-                    requests = dict(
-                        [[k.lower(), v] for k, v in request.items()])
-                    request[PATH] = 0
-                    added_element = list()
-                    added_element.append(requests)
-                    # posts = self.database.get_posts(request[BUILDING_ID])
-                    # await self.refresh_elements(GET_POSTS_SYNCHRONIZE,
-                    #                             added_element,
-                    #                             removed_elements=[],
-                    #                             target_id=request[BUILDING_ID],
-                    #                             updated_elements=[])
+                    if self.path_img is not None:
+                        self.database.create_post(request['ID'],
+                                                  request[BUILDING_ID],
+                                                  request[NAME],
+                                                  request[DESCRIPTION],
+                                                  self.path_img,
+                                                  request[QRCODE],
+                                                  request[QRCODE_IMG])
+                        await self.create_image_file(request[PATH])
+                        request['image'] = self.path_img
+                        requests = dict(
+                            [[k.lower(), v] for k, v in request.items()])
+                        request[PATH] = 0
+                        added_element = list()
+                        added_element.append(requests)
+                        # posts = self.database.get_posts(request[BUILDING_ID])
+                        # await self.refresh_elements(GET_POSTS_SYNCHRONIZE,
+                        #                             added_element,
+                        #                             removed_elements=[],
+                        #                             target_id=request[BUILDING_ID],
+                        #                             updated_elements=[])
 
                     log.info(request)
 
                 elif ACTION in request and request[ACTION] == ADD_COMPONENT:
                     self.path_img = self.get_full_path(request)
-                    self.database.create_component(request['ID'],
-                                                   request[NAME],
-                                                   request[DESCRIPTION],
-                                                   self.path_img)
-                    await self.create_image_file(request[PATH])
-                    # components = self.database.get_components()
-                    request['image'] = self.path_img
-                    requests = dict(
-                        [[k.lower(), v] for k, v in request.items()])
-                    request[PATH] = 0
-                    added_element = list()
-                    added_element.append(requests)
+                    if self.path_img is not None:
+                        self.database.create_component(request['ID'],
+                                                       request[NAME],
+                                                       request[DESCRIPTION],
+                                                       self.path_img)
+                        await self.create_image_file(request[PATH])
+                        # components = self.database.get_components()
+                        request['image'] = self.path_img
+                        requests = dict(
+                            [[k.lower(), v] for k, v in request.items()])
+                        request[PATH] = 0
+                        added_element = list()
+                        added_element.append(requests)
 
-                    # await self.refresh_elements(GET_COMPONENTS_SYNCHRONIZE,
-                    #                             added_element,
-                    #                             removed_elements=[],
-                    #                             updated_elements=[])
+                        # await self.refresh_elements(GET_COMPONENTS_SYNCHRONIZE,
+                        #                             added_element,
+                        #                             removed_elements=[],
+                        #                             updated_elements=[])
                     log.info(request)
 
                 elif ACTION in request and request[ACTION] == \
@@ -418,27 +467,27 @@ class Server:
                         int(request[COMPONENT_ID]))
                     self.path_img = self.join_path(parent.image, request,
                                                    n_split=1)
+                    if self.path_img is not None:
+                        self.database.create_component_rank(
+                            request['ID'],
+                            int(request[COMPONENT_ID]),
+                            request[NAME],
+                            request[RANK],
+                            self.path_img)
+                        await self.create_image_file(request[PATH])
+                        request['image'] = self.path_img
+                        requests = dict(
+                            [[k.lower(), v] for k, v in request.items()])
+                        request[PATH] = 0
+                        added_element = list()
+                        added_element.append(requests)
 
-                    self.database.create_component_rank(
-                        request['ID'],
-                        int(request[COMPONENT_ID]),
-                        request[NAME],
-                        request[RANK],
-                        self.path_img)
-                    await self.create_image_file(request[PATH])
-                    request['image'] = self.path_img
-                    requests = dict(
-                        [[k.lower(), v] for k, v in request.items()])
-                    request[PATH] = 0
-                    added_element = list()
-                    added_element.append(requests)
-
-                    # await self.refresh_elements(
-                    #     GET_COMPONENTS_RANKS_SYNCHRONIZE,
-                    #     added_element,
-                    #     removed_elements=[],
-                    #     target_id=request[COMPONENT_ID],
-                    #     updated_elements=[])
+                        # await self.refresh_elements(
+                        #     GET_COMPONENTS_RANKS_SYNCHRONIZE,
+                        #     added_element,
+                        #     removed_elements=[],
+                        #     target_id=request[COMPONENT_ID],
+                        #     updated_elements=[])
                     log.info(request)
 
                 elif ACTION in request and request[ACTION] == \
@@ -544,13 +593,17 @@ class Server:
                     #                             added_elements=[],
                     #                             removed_elements=remove_element,
                     #                             updated_elements=[])
-
+                elif ACTION in request and request[ACTION] == REMOVE_CORPUS:
+                    path = self.database.remove_corpus(request[CORPUS_ID])
+                    remove_element = list()
+                    remove_element.append({'id': request[CORPUS_ID]})
+                    shutil.rmtree(path.rsplit(os.sep, 1)[0])
                 elif ACTION in request and request[ACTION] == REMOVE_EMPLOEE:
                     path = self.database.remove_user(request[USER_ID])
                     print(path, 'REMOVE_EMPLOEE')
                     remove_element = list()
                     remove_element.append({'id': request[USER_ID]})
-                    shutil.rmtree(path.rsplit(os.sep, 1)[0])
+                    # shutil.rmtree(path.rsplit(os.sep, 1)[0])
 
                 elif ACTION in request and request[ACTION] == CREATE_BYPASS:
                     self.database.create_bypass(request[ID],
@@ -583,6 +636,9 @@ class Server:
                     self.database.finished_bypass(request[AVG_RANK],
                                                   request[BYPASS_ID],
                                                   request[END_TIME])
+
+                    # clear redis db memory
+                    self.red.flushall()
 
                 elif ACTION in request and request[ACTION] == \
                         CLEANER_ON_BYPASS:
@@ -619,6 +675,19 @@ class Server:
                                                 removed_elements, websocket,
                                                 updated_elements=updated_elements)
 
+                elif ACTION in request and request[ACTION] == GET_CORPUS:
+                    corpus = self.database.get_corpus()
+                    client_elements = request[LOCAL_DATABASE]
+                    client_server = client_elements + corpus
+                    added_elements = self.get_list_elements(client_server,
+                                                            client_elements)
+                    removed_elements = self.get_list_elements(client_server,
+                                                              corpus)
+                    await self.refresh_elements(GET_CORPUS_SYNCHRONIZE,
+                                                added_elements,
+                                                removed_elements,
+                                                websocket,
+                                                updated_elements=[])
                 elif ACTION in request and request[ACTION] == GET_OBJECTS:
                     # get elements from server database
                     buildings = self.database.get_buildings()
@@ -664,6 +733,7 @@ class Server:
                                                               posts)
 
                     print(f'{added_elements} add {removed_elements} remove')
+                    
                     await self.refresh_elements(GET_POSTS_SYNCHRONIZE,
                                                 added_elements,
                                                 removed_elements,
@@ -673,7 +743,30 @@ class Server:
 
                     print(posts)
                     # await self.refresh_elements(GET_POSTS, posts)
+                elif ACTION in request and request[ACTION] == 'GET_ALL_POSTS_FROM_SERVER':
+                    posts_all = self.database.get_all_posts()
+                    # record elements from client app
+                    client_elements = request[LOCAL_DATABASE]
 
+                    # unite elements with server and with client databases
+                    client_server = client_elements + posts_all
+
+                    # add elements on client which not to server
+                    added_elements = self.get_list_elements(client_server,
+                                                            client_elements)
+
+                    # remove elements on client app which not to server
+                    removed_elements = self.get_list_elements(client_server,
+                                                              posts_all)
+
+                    print(f'{added_elements} add {removed_elements} remove')
+
+                    await self.refresh_elements('GET_ALL_POSTS_FROM_SERVER',
+                                                added_elements,
+                                                removed_elements,
+                                                websocket,
+                                                target_id=None,
+                                                updated_elements=[])
                 elif ACTION in request and request[ACTION] == GET_COMPONENTS:
                     # get elements from server database
                     components = self.database.get_components()
@@ -780,9 +873,15 @@ class Server:
                                         MESSAGE: status_object_detail}))
                 elif ACTION in request and request[ACTION] == \
                         GET_BYPASS_STATUS_POSTS:
-                    status_posts = self.database.get_status_posts(
-                        request[OBJECT_NAME], request[PERIOD])
-                    print(status_posts, 'INFO-FOR-POSTS')
+                    start = time.time()
+                    if not self.red.exists(f'{GET_BYPASS_STATUS_POSTS}_{request[OBJECT_NAME]}_{request[PERIOD]}'):
+
+                        status_posts = self.database.get_status_posts(
+                            request[OBJECT_NAME], request[PERIOD])
+                        self.red.set(f'{GET_BYPASS_STATUS_POSTS}_{request[OBJECT_NAME]}_{request[PERIOD]}', json.dumps(status_posts))
+                    else:
+                        status_posts = json.loads(self.red.get(f'{GET_BYPASS_STATUS_POSTS}_{request[OBJECT_NAME]}_{request[PERIOD]}'))
+                    print('INFO-FOR-POSTS', time.time() - start)
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        {ACTION: GET_BYPASS_STATUS_POSTS,
@@ -803,16 +902,23 @@ class Server:
                 elif ACTION in request and request[ACTION] == \
                         GET_BYPASS_STATUS_USERS_DETAIL:
                     print(request)
-                    status_users_detail = self.database.get_status_users_detail(
-                        request[PERIOD],
-                        f"'{request[POST_NAME]}'",
-                        f"'{request[USER_EMAIL]}'",
-                        request[START_TIME]
-                    )
+                    start = time.time()
+
                     action_status = GET_BYPASS_STATUS_USERS_DETAIL_FOR_DAY if \
                     request[PERIOD] == 'day' or request[
                         PERIOD] == 'today' else GET_BYPASS_STATUS_USERS_DETAIL
+                    if not self.red.exists(f'{action_status}_{request[USER_EMAIL]}_{request[POST_NAME]}_{request[PERIOD]}_{request[START_TIME]}'):
+                        status_users_detail = self.database.get_status_users_detail(
+                            request[PERIOD],
+                            f"'{request[POST_NAME]}'",
+                            f"'{request[USER_EMAIL]}'",
+                            request[START_TIME]
+                        )
+                        self.red.set(f'{action_status}_{request[USER_EMAIL]}_{request[POST_NAME]}_{request[PERIOD]}_{request[START_TIME]}', json.dumps(status_users_detail))
+                    else:
+                        status_users_detail = json.loads(self.red.get(f'{action_status}_{request[USER_EMAIL]}_{request[POST_NAME]}_{request[PERIOD]}_{request[START_TIME]}'))
                     print(status_users_detail)
+                    print(f'{time.time() - start}')
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        {
@@ -889,11 +995,18 @@ class Server:
                     print(user, 'AUTHENTICATE')
                     email = getattr(user, 'email', None)
                     ids = getattr(user, 'id', None)
-                    await self.refresh_elements_no_content(CHECK_AUTHENTICATION,
-                                                           {
-                                                               'email': email,
-                                                               'id': ids,
-                                                           })
+
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       {ACTION: CHECK_AUTHENTICATION,
+                                        MESSAGE: {'email': email,
+                                                  'id': ids}}))
+                    # else:
+                    #     await self.refresh_elements_no_content(CHECK_AUTHENTICATION,
+                    #                                            {
+                    #                                                'email': email,
+                    #                                                'id': ids,
+                    #                                            })
                 elif ACTION in request and request[ACTION] == SEND_MESSAGE_TO_MAIL:
                     emails = [request[EMAIL]]
                     my_text = "<html>" \
@@ -1017,25 +1130,36 @@ class Server:
                                    await self.process_client_message(
                                        user_basic_dict))
                 elif ACTION in request and request[ACTION] == GET_LIST_USERS_AVERAGE_FOR_POST:
-                    users_stat_avg = self.database.get_list_users_average_for_post(
-                        request[PERIOD],
-                        request[START_TIME],
-                        request[END_TIME],
-                        request[POST_NAME]
-                    )
+                    start = time.time()
+                    if not self.red.exists(f'{GET_LIST_USERS_AVERAGE_FOR_POST}_{request[POST_NAME]}_{request[PERIOD]}'):
+                        users_stat_avg = self.database.get_list_users_average_for_post(
+                            request[PERIOD],
+                            request[START_TIME],
+                            request[END_TIME],
+                            request[POST_NAME]
+                        )
+                        self.red.set(f'{GET_LIST_USERS_AVERAGE_FOR_POST}_{request[POST_NAME]}_{request[PERIOD]}', json.dumps(users_stat_avg))
+                    else:
+                        users_stat_avg = json.loads(self.red.get(f'{GET_LIST_USERS_AVERAGE_FOR_POST}_{request[POST_NAME]}_{request[PERIOD]}'))
                     user_stat_avg_dict = {
                         ACTION: GET_LIST_USERS_AVERAGE_FOR_POST,
                         MESSAGE: users_stat_avg
                     }
+                    print(users_stat_avg, ' TEST FUNCTIONALITY')
+                    print(time.time() - start, 'time execute query')
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        user_stat_avg_dict))
                 elif ACTION in request and request[ACTION] == \
                         'GET_STATUS_USER_WITH_TBR':
-                    users_stat = self.database.get_status_user_with_tbr(
-                        request[PERIOD],
-                        request[BUILDING_ID]
-                    )
+                    if not self.red.exists(f'{"GET_STATUS_USER_WITH_TBR"}_{request[PERIOD]}_{request[BUILDING_ID]}'):
+                        users_stat = self.database.get_status_user_with_tbr(
+                            request[PERIOD],
+                            request[BUILDING_ID]
+                        )
+                        self.red.set(f'{"GET_STATUS_USER_WITH_TBR"}_{request[PERIOD]}_{request[BUILDING_ID]}', json.dumps(users_stat))
+                    else:
+                        users_stat = json.loads(self.red.get(f'{"GET_STATUS_USER_WITH_TBR"}_{request[PERIOD]}_{request[BUILDING_ID]}'))
                     users_stat_dict = {
                         ACTION: 'GET_STATUS_USER_WITH_TBR',
                         MESSAGE: users_stat
@@ -1045,13 +1169,16 @@ class Server:
                                        users_stat_dict))
                 elif ACTION in request and request[ACTION] == \
                     'GET_STATUS_USER_WITH_TBR_DETAIL':
-
-                    user_stat_detail = self.database.\
-                        get_status_user_with_tbr_detail(
-                            request[PERIOD], 
-                            request[USER_ID], 
-                            request[BUILDING_ID],
-                            request[START_TIME], request[END_TIME])
+                    if not self.red.exists(f'{"GET_STATUS_USER_WITH_TBR_DETAIL"}_{request[PERIOD]}_{request[USER_ID]}_{request[BUILDING_ID]}'):
+                        user_stat_detail = self.database.\
+                            get_status_user_with_tbr_detail(
+                                request[PERIOD],
+                                request[USER_ID],
+                                request[BUILDING_ID],
+                                request[START_TIME], request[END_TIME])
+                        self.red.set(f'{"GET_STATUS_USER_WITH_TBR_DETAIL"}_{request[PERIOD]}_{request[USER_ID]}_{request[BUILDING_ID]}', json.dumps(user_stat_detail))
+                    else:
+                        user_stat_detail = json.loads(self.red.get(f'{"GET_STATUS_USER_WITH_TBR_DETAIL"}_{request[PERIOD]}_{request[USER_ID]}_{request[BUILDING_ID]}'))
                     user_stat_detail_dict = {
                         ACTION: 'GET_STATUS_USER_WITH_TBR_DETAIL',
                         MESSAGE: user_stat_detail
@@ -1060,7 +1187,24 @@ class Server:
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        user_stat_detail_dict))
+                elif ACTION in request and request[ACTION] == \
+                        'GET_STATUS_COMPONENT_FOR_BUILDING':
+                    components = self.database.\
+                        get_status_component_with_building(
+                            request[PERIOD],
+                            request[BUILDING_ID],
+                            request[START_TIME],
+                            request[END_TIME]
+                    )
+                    components_dict = {
+                        ACTION: 'GET_STATUS_COMPONENT_FOR_BUILDING',
+                        MESSAGE: components
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       components_dict))
         finally:
+            print('FINISHED HIM', websocket)
             await self.unregister(websocket)
 
 
@@ -1074,7 +1218,7 @@ if __name__ == '__main__':
             port = int(sys.argv[4])
             print(type(port))
 
-    server = Server('192.168.1.2', 8760)
+    server = Server('192.168.1.12', 8760)
     server.start()
 
     print(sys.argv)

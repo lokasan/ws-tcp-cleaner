@@ -1,15 +1,19 @@
 import time
+import os
+import shutil
 import psycopg2
 from sqlalchemy import Column, BigInteger, Boolean, Integer, String, Text, ForeignKey, \
-    create_engine, Table, MetaData, Date, desc
+    create_engine, Table, MetaData, Date, DateTime, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.orm import scoped_session
+from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import BIGINT
 from sqlalchemy.sql import text
 from sqlalchemy_views import CreateView
 from time import time
 import random
+import pathlib
 from server.database.query_text.queries import *
 from server.database.query_text.view import view_create, view_drop, view_create_detail, view_drop_detail
 from server.utilities.helper_functions.get_today import get_today, get_start_day
@@ -194,12 +198,34 @@ class MainDataBase:
             self.bypass_rank_id = bypass_rank_id
             self.image = image
 
+    class Corpus(Base):
+        """
+
+        """
+        __tablename__ = 'corpus'
+        id = Column(BigInteger, primary_key=True)
+        name = Column(String, nullable=False, unique=True)
+        description = Column(String)
+        address = Column(String)
+        coords = Column(Text)
+        image = Column(Text)
+        building = relationship('Building', cascade='all,delete', backref='corpus')
+
+        def __init__(self, id, name, description, address, coords, image):
+            self.id = id
+            self.name = name
+            self.description = description
+            self.address = address
+            self.coords = coords
+            self.image = image
+
     class Building(Base):
         """
 
         """
         __tablename__ = 'building'
         id = Column(BigInteger, primary_key=True)
+        corpus_id = Column(BigInteger, ForeignKey('corpus.id'))
         name = Column(String, nullable=False, unique=True)
         address = Column(String)
         description = Column(String)
@@ -322,7 +348,7 @@ class MainDataBase:
         create_date_row = Column(Date, nullable=False)
 
     def __init__(self, path='server_base.db3'):
-        self.engine = create_engine(f'postgresql+psycopg2://postgres:postgres@192.168.1.13:5480/postgres', pool_recycle=7200)
+        self.engine = create_engine(f'postgresql+psycopg2://postgres:TeJ1yei8uhe9Ioqu@192.168.1.11:5480/postgres', pool_recycle=7200)
         self.Base.metadata.create_all(self.engine)
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
@@ -331,6 +357,27 @@ class MainDataBase:
         # will added clear list function connected users
         self.session.query(self.ActiveUser).delete()
         self.session.commit()
+        self._create_default_user()
+
+    def _create_default_user(self):
+        if not self.session.query(self.User).count():
+            surname = 'Administrator'
+            name = 'Admin'
+            lastname = 'Admin'
+            name_default_avatar = 'default.png'
+            default_image_src = os.getcwd() + os.sep + name_default_avatar
+            destination_image_path = os.path.normpath(
+                os.getcwd() + os.sep + os.pardir + os.sep + 'images' + os.sep + 'user' + os.sep + name + os.sep + name_default_avatar)
+            print(os.getcwd(), ' My path to database file')
+            if os.path.isfile(default_image_src):
+                if not os.path.exists(destination_image_path.rsplit(os.sep, 1)[0]):
+                    os.makedirs(destination_image_path.rsplit(os.sep, 1)[0])
+                shutil.copyfile(default_image_src, destination_image_path)
+                user = self.User(1, surname, name, lastname, 'main_account',
+                                 'nsclean@neweducations.online', 2, '007', 0, destination_image_path,
+                                 'header_admin', None)
+                self.session.add(user)
+                self.session.commit()
 
     def check_user(self, email: str) -> bool:
         """
@@ -404,14 +451,21 @@ class MainDataBase:
         """
         user = self.session.query(self.ActiveUser).filter_by(
             id_ws=id_ws_handler).first()
+        user_count = 1
+        user_active_many = self.session.query(self.ActiveUser).filter_by(
+            user_id=user.user_id).all()
+        if isinstance(user_active_many, list):
+            user_count = len(user_active_many)
         print('user', user)
 
         user_exit = self.session.query(self.ActiveUser).filter_by(
             id_ws=id_ws_handler).first()
+        user_id = getattr(user, 'user_id', None)
         self.session.delete(user_exit)
         self.session.commit()
 
-        return user
+        return {'user_id': user.user_id,
+                'user_count': user_count}
 
     def user_logout(self, email: str, id_ws: str) -> dict:
         """
@@ -565,15 +619,17 @@ class MainDataBase:
             'create_date': user_shift.create_date
         } if user_shift else user_shift
 
-    def remove_user(self, user_id: str) -> None:
+    def remove_user(self, user_id: str) -> str:
         """
 
-        :param email:
-        :return: None
+        :param user_id:
+        :return str: 
         """
         user = self.session.query(self.User).filter_by(id=user_id).first()
+        shutil.rmtree(user.image.rsplit(os.sep, 1)[0])
         self.session.delete(user)
         self.session.commit()
+        self._create_default_user()
         return user.image
 
     def get_user(self, email: str) -> dict:
@@ -632,6 +688,59 @@ class MainDataBase:
                 'start_shift': element.start_shift,
             }
             for element in users.all()]
+    
+    def create_corpus(self, id, name, address, description, image, coords) \
+            -> None:
+        """
+        
+        :param id: 
+        :param name: 
+        :param address: 
+        :param description: 
+        :param image: 
+        :param coords: 
+        :return None:
+        """
+        corpus_row = self.Corpus(id, name, description, address, coords, image)
+        self.session.add(corpus_row)
+        self.session.commit()
+        
+    def remove_corpus(self, id) -> str:
+        """
+
+        :param id:
+        :return str:
+        """
+        corpus_row = self.session.query(self.Corpus).filter_by(id=id).fisrt()
+        self.session.delete(corpus_row)
+        self.session.commit()
+        return corpus_row.image
+
+    def get_corpus(self):
+        """
+        
+        :return list: 
+        """
+        corpus = self.session.query(self.Corpus)
+        return [
+            {
+                'id': element.id,
+                'name': element.name,
+                'description': element.description,
+                'address': element.address,
+                'coords': element.coords,
+                'create_date': element.create_date,
+                'image': element.image
+            }
+            for element in corpus.all()]
+
+    def get_corpus_id(self, id):
+        """
+        
+        :param id: 
+        :return: 
+        """
+        return self.session(self.Corpus).filter_by(id=id).first()
 
     def create_building(self, id, name, address, description, image) -> None:
         """
@@ -680,9 +789,8 @@ class MainDataBase:
         :param id: 
         :return: 
         """
-        building = self.session.query(self.Building).filter_by(id=id).first()
-        return building
-
+        return self.session.query(self.Building).filter_by(id=id).first()
+        
     def create_post(self, id, building_id, name, description, image, qr_code,
                     qr_code_img) -> None:
         """
@@ -740,6 +848,20 @@ class MainDataBase:
                 'qrcode_img': el.qr_code_img
             }
             for el in posts.all()]
+    
+    def get_all_posts(self) -> list:
+        posts_all = self.session.query(self.Post)
+        return [
+            {
+                'building_id': el.building_id,
+                'id': el.id,
+                'name': el.name,
+                'description': el.description,
+                'image': el.image,
+                'qrcode': el.qr_code,
+                'qrcode_img': el.qr_code_img
+            }
+            for el in posts_all.all()]
     
     def get_user_email(self, email: str) -> int:
         """
@@ -1447,16 +1569,14 @@ class MainDataBase:
                 round(get_today() + TAIL_TODAY),
                 post_name,
                 user_email,
-                USERS_LIST_QUERY_AVG_MONTH_WEEK,
-                USERS_LIST_VIEW)
+                USERS_LIST_QUERY_AVG_MONTH_WEEK)
         if period == 'month_range':
             return self.get_list_users_detail_week_month(
                 round(start_time),
                 round(start_time + MONTH_MILLISECONDS),
                 post_name,
                 user_email,
-                USERS_LIST_QUERY_AVG_MONTH_WEEK,
-                USERS_LIST_VIEW
+                USERS_LIST_QUERY_AVG_MONTH_WEEK
             )
         if period == 'month':
             return self.get_list_users_detail_week_month(
@@ -1464,8 +1584,7 @@ class MainDataBase:
                 round(get_today() + TAIL_TODAY),
                 post_name,
                 user_email,
-                USERS_LIST_QUERY_AVG_MONTH_WEEK,
-                USERS_LIST_VIEW
+                USERS_LIST_QUERY_AVG_MONTH_WEEK
             )
             # return self.get_list_users_detail(
             #     round(get_today() - MONTH_MILLISECONDS),
@@ -1480,8 +1599,7 @@ class MainDataBase:
                 round(get_today() + TAIL_TODAY),
                 post_name,
                 user_email,
-                USERS_LIST_QUERY_AVG_MONTH_WEEK,
-                USERS_LIST_VIEW_YEAR
+                USERS_LIST_QUERY_AVG_YEAR
             )
         if period == 'day':
             return self.get_list_users_detail(
@@ -1568,7 +1686,7 @@ class MainDataBase:
         return temp_list
 
     def get_list_users_detail_week_month(self, start_time, end_time, post_name,
-                                         user_email, query, view):
+                                         user_email, query):
         """
         доделать изменения добавить отображение и новые данные (зацепка:
         использовать шаблон для отображения данных на клиенте)
@@ -1579,13 +1697,12 @@ class MainDataBase:
         :param query: 
         :return: 
         """
-        query = query.format(post_name, user_email)
+        query = query.format(post_name, user_email, start_time, end_time)
         print('__________________________')
         print(f"{start_time} | {end_time}")
         print('__________________________')
 
-        create_view = view % (start_time, end_time)
-        qrt = self.create_remove_view_detail(create_view, query)
+        qrt = self.engine.execute(query).all()
 
         anchor = 0
         temp_list = []
@@ -1673,11 +1790,12 @@ class MainDataBase:
         for idx in range(len(qrt)):
             if id_temp == qrt[idx][0]:
                 print('id_temp equal bypass_id')
-                my_dicts[str(qrt[idx][7])] = qrt[idx][9]
-                my_dicts[str(qrt[idx][7]) + '_rank'] = qrt[idx][12]
-                my_dicts[str(qrt[idx][7]) + '_description'] = qrt[idx][10]
-                my_dicts[str(qrt[idx][7]) + '_name_c_r'] = qrt[idx][13]
-                my_dicts[str(qrt[idx][7]) + '_is_image'] = qrt[idx][20]
+                my_dicts[str(qrt[idx][8])] = qrt[idx][9]
+                my_dicts[str(qrt[idx][8]) + '_rank'] = qrt[idx][12]
+                my_dicts[str(qrt[idx][8]) + '_description'] = qrt[idx][10]
+                my_dicts[str(qrt[idx][8]) + '_name_c_r'] = qrt[idx][13]
+                my_dicts[str(qrt[idx][8]) + '_is_image'] = qrt[idx][20]
+                my_dicts[str(qrt[idx][8]) + '_bypass_rank_id'] = qrt[idx][7]
                 print(my_dicts, 'my_dicts')
             if not id_temp:
                 print('no id_temp')
@@ -1689,11 +1807,12 @@ class MainDataBase:
                     'weather': qrt[idx][4],
                     'temperature': qrt[idx][5],
                     'cleaner': qrt[idx][6],
-                    str(qrt[idx][7]): qrt[idx][9],
-                    str(qrt[idx][7]) + '_rank': qrt[idx][12],
-                    str(qrt[idx][7]) + '_description': qrt[idx][10],
-                    str(qrt[idx][7]) + '_name_c_r': qrt[idx][13],
-                    str(qrt[idx][7]) + '_is_image': qrt[idx][20],
+                    str(qrt[idx][8]): qrt[idx][9],
+                    str(qrt[idx][8]) + '_rank': qrt[idx][12],
+                    str(qrt[idx][8]) + '_description': qrt[idx][10],
+                    str(qrt[idx][8]) + '_name_c_r': qrt[idx][13],
+                    str(qrt[idx][8]) + '_is_image': qrt[idx][20],
+                    str(qrt[idx][8]) + '_bypass_rank_id': qrt[idx][7],
                     'post_name': qrt[idx][15],
                     'icon': qrt[idx][16],
                     'title': f'{qrt[idx][17]} {qrt[idx][18]} {qrt[idx][19]}',
@@ -1711,11 +1830,12 @@ class MainDataBase:
                     'weather': qrt[idx][4],
                     'temperature': qrt[idx][5],
                     'cleaner': qrt[idx][6],
-                    str(qrt[idx][7]): qrt[idx][9],
-                    str(qrt[idx][7]) + '_rank': qrt[idx][12],
-                    str(qrt[idx][7]) + '_description': qrt[idx][10],
-                    str(qrt[idx][7]) + '_name_c_r': qrt[idx][13],
-                    str(qrt[idx][7]) + '_is_image': qrt[idx][20],
+                    str(qrt[idx][8]): qrt[idx][9],
+                    str(qrt[idx][8]) + '_rank': qrt[idx][12],
+                    str(qrt[idx][8]) + '_description': qrt[idx][10],
+                    str(qrt[idx][8]) + '_name_c_r': qrt[idx][13],
+                    str(qrt[idx][8]) + '_is_image': qrt[idx][20],
+                    str(qrt[idx][8]) + '_bypass_rank_id': qrt[idx][7],
                     'post_name': qrt[idx][15],
                     'icon': qrt[idx][16],
                     'title': f'{qrt[idx][17]} {qrt[idx][18]} {qrt[idx][19]}',
@@ -1814,13 +1934,14 @@ class MainDataBase:
         :param is_time:
         :return:
         """
-        qrt = self.create_and_remove_view_and_get_list(is_time,
-                                                       OBJECTS_LIST_VIEW,
-                                                       QUERY_GET_OBJECTS)
+        qrt = self.engine.execute(QUERY_GET_OBJECTS.
+                                  format(get_today() - is_time,
+                                         get_today() + TAIL_TODAY)).all()
+
         return [{
             'id': str(time() + random.randint(1, 15000)),
             'title': el[1],
-            'avgRanks': self._to_fixed(el[-2], 1),
+            'avgRanks': self._to_fixed(el[8], 1),
             'countBypass': el[7],
             'countTime': el[6],
             'bestPost': el[2],
@@ -1830,7 +1951,9 @@ class MainDataBase:
             'countCircle': '-',
             'steps': '-',
             'trand': 1,
-            'building_id': el[-1]
+            'building_id': el[0],
+            'cycle': el[9],
+            'time_between_bypass': el[10]
         }
             for el in qrt]
 
@@ -1913,15 +2036,15 @@ class MainDataBase:
 
         qrt_prev = self.engine.execute(
             QUERY_GET_BASE_STATIC_BY_USER.format(
-            start_time_str - (end_time_str - start_time_str),
-                start_time_str
+                get_today(),
+                get_today() + 86400000
         ))
         current_statistics = [
             {
                 'id': el.id,
-                'avg_rank': float(el.avg_rank),
-                'count_bypass': el.count_bypass,
-                'cycle': el.cycle,
+                'avg_rank': float(el.avg_rank) if el.avg_rank else 0,
+                'count_bypass': el.count_bypass if el.count_bypass else 0,
+                'cycle': el.cycle if el.cycle else 0,
                 'time_between_bypass': int(el.tbr) if el.tbr else None,
                 'time_bypass': int(el.time_bypass)
             }
@@ -1929,9 +2052,9 @@ class MainDataBase:
         prev_statistics = [
             {
                 'id': el.id,
-                'prev_avg_rank': float(el.avg_rank),
-                'prev_count_bypass': el.count_bypass,
-                'prev_cycle': el.cycle,
+                'prev_avg_rank': float(el.avg_rank) if el.avg_rank else 0,
+                'prev_count_bypass': el.count_bypass if el.count_bypass else 0,
+                'prev_cycle': el.cycle if el.cycle else 0,
                 'prev_time_between_bypass': int(el.tbr) if el.tbr else None,
                 'prev_time_bypass': int(el.time_bypass)
             }
@@ -1986,8 +2109,9 @@ class MainDataBase:
                 'trand': 1
             }
             for el in qrt.all()]
+        print(f'this is tbr {current_statistics}')
         return current_statistics
-
+        
     def get_status_user_with_tbr(self, period=None, building_id=None, 
                                  start_time=None, end_time=None):
         if period == 'today':
@@ -2001,6 +2125,48 @@ class MainDataBase:
             
         return self.get_list_user_with_tbr(building_id, start_time, end_time)
 
+    def get_list_component_with_building(self, building_id, start_time,
+                                         end_time):
+        start_time_str = start_time if start_time else get_today()
+        end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+
+        qrt = self.engine.execute(
+            QUERY_GET_COMPONENT_FOR_BUILDING.format(
+                start_time_str,
+                end_time_str,
+                building_id))
+
+        current_statistics = [
+            {
+                'id': el.component_id,
+                'avg_rank': float(el.avg_rank),
+                'count_bypass': el.count_bypass_rank,
+                'time_bypasses_component': int(el.time_bypasses_component),
+                'building_id': building_id,
+                'component_name': el.component_name,
+                'avg_rank_component': float(el.avg_rank_component),
+                'sum_time_bypasses_component': int(
+                    el.sum_time_bypasses_component),
+                'sum_qr_scan_component': int(el.sum_qr_scan_component),
+                'trand': 1
+            }
+            for el in qrt.all()]
+        return current_statistics
+    
+    def get_status_component_with_building(self, period=None, building_id=None,
+                                           start_time=None, end_time=None):
+        if period == 'today':
+            pass
+        if period == 'week':
+            start_time = get_today() - WEEK_MILLISECONDS
+        if period == 'month':
+            start_time = get_today() - MONTH_MILLISECONDS
+        if period == 'year':
+            start_time = get_today() - YEAR_MILLISECONDS
+        
+        return self.get_list_component_with_building(building_id, start_time,
+                                                     end_time)
+    
     def get_list_user_with_tbr_detail(self,
                                       user_id=None,
                                       building_id=None,
@@ -2042,10 +2208,10 @@ class MainDataBase:
                     str(qrt[idx][3]) + '_rank': float(qrt[idx][11]),
                     str(qrt[idx][3]) + 'count_bad_rank': qrt[idx][17],
                     'avg_rank_post': float(qrt[idx][10]),
-                    'count_bypass': qrt[idx][12],
+                    'count_bypass': int(qrt[idx][12]),
                     'cleaner': qrt[idx][13],
                     'time_bypasses': int(qrt[idx][14]),
-                    'avg_bp_by_bp': qrt[idx][15],
+                    'avg_bp_by_bp': float(qrt[idx][15]),
                     'avg_temperature': int(qrt[idx][16]),
                     'title': f'{qrt[idx][4]} {qrt[idx][5]} {qrt[idx][6]}'
                 }
@@ -2068,10 +2234,10 @@ class MainDataBase:
                     str(qrt[idx][3]) + '_rank': float(qrt[idx][11]),
                     str(qrt[idx][3]) + 'count_bad_rank': qrt[idx][17],
                     'avg_rank_post': float(qrt[idx][10]),
-                    'count_bypass': qrt[idx][12],
+                    'count_bypass': int(qrt[idx][12]),
                     'cleaner': qrt[idx][13],
                     'time_bypasses': int(qrt[idx][14]),
-                    'avg_bp_by_bp': qrt[idx][15],
+                    'avg_bp_by_bp': float(qrt[idx][15]),
                     'avg_temperature': int(qrt[idx][16]),
                     'title': f'{qrt[idx][4]} {qrt[idx][5]} {qrt[idx][6]}'
                 }
@@ -2185,14 +2351,15 @@ if __name__ == '__main__':
     # print(
     #     json.dumps(server.get_list_users_average_for_post(1629752400000, end_time, 'мрт'), indent=4, ensure_ascii=False))
     # server.engine.execute(USERS_LIST_QUERY_AVG.format('мрт')).all()
-
-    print(server.get_photo_user_of_post('month',
-                                        1625706704854,
-                                        1625941962224,
-                                        r"'borisostroumov@gmail.com'",
-                                        1,
-                                        0))
-    print(server.get_photo_rank_gallery_count_user_post('month',
-                                                        1625706704854,
-                                                        1625941962224,
-                                                        r"'borisostroumov@gmail.com'"))
+    print(server.session.execute('select now();').all())
+    # print(server.get_photo_user_of_post('month',
+    #                                     1625706704854,
+    #                                     1625941962224,
+    #                                     r"'borisostroumov@gmail.com'",
+    #                                     1,
+    #                                     0))
+    # print(server.get_photo_rank_gallery_count_user_post('month',
+    #                                                     1625706704854,
+    #                                                     1625941962224,
+    #                                                     r"'borisostroumov@gmail.com'"))
+    server._create_default_user()
