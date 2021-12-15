@@ -27,7 +27,7 @@ class Server:
         super().__init__()
         self.clients = []
         self.database = MainDataBase()
-        self.red = redis.Redis(host='192.168.1.8')
+        self.red = redis.Redis(host='192.168.1.14')
         self.path_img = ''
         self.address = listen_address
         self.port = listen_port
@@ -393,9 +393,13 @@ class Server:
                         added_element.append(requests)
 
                 elif ACTION in request and request[ACTION] == ADD_OBJECT:
-                    self.path_img = self.get_full_path(request)
+                    parent = self.database.get_corpus_id(
+                        int(request['CORPUS_ID']))
+                    self.path_img = self.join_path(parent.image, request,
+                                                   n_split=1)
                     if self.path_img is not None:
                         self.database.create_building(request['ID'],
+                                                      request['CORPUS_ID'],
                                                       request[NAME],
                                                       request[ADDRESS],
                                                       request[DESCRIPTION],

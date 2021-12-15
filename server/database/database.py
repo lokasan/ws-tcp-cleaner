@@ -232,8 +232,9 @@ class MainDataBase:
         image = Column(Text)
         post = relationship('Post', cascade="all,delete", backref='building')
 
-        def __init__(self, id, name, address, description, image):
+        def __init__(self, id, corpus_id, name, address, description, image):
             self.id = id
+            self.corpus_id = corpus_id
             self.name = name
             self.address = address
             self.description = description
@@ -744,9 +745,9 @@ class MainDataBase:
         :param id: 
         :return: 
         """
-        return self.session(self.Corpus).filter_by(id=id).first()
+        return self.session.query(self.Corpus).filter_by(id=id).first()
 
-    def create_building(self, id, name, address, description, image) -> None:
+    def create_building(self, id, corpus_id, name, address, description, image) -> None:
         """
 
         :param name:
@@ -755,7 +756,7 @@ class MainDataBase:
         :param image:
         :return: None
         """
-        building_row = self.Building(id, name, address, description, image)
+        building_row = self.Building(id, corpus_id, name, address, description, image)
         print(building_row)
         self.session.add(building_row)
         self.session.commit()
