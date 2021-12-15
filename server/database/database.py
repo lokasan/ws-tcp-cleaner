@@ -360,15 +360,20 @@ class MainDataBase:
         self._create_default_user()
 
     def _create_default_user(self):
+        print('Hello i am here in create default user')
         if not self.session.query(self.User).count():
+            print('Hello i am here in create default user in if not self.session.query')
             surname = 'Administrator'
             name = 'Admin'
             lastname = 'Admin'
             name_default_avatar = 'default.png'
             default_image_src = os.getcwd() + os.sep + name_default_avatar
+            print(f'{default_image_src} : image default src')
             destination_image_path = os.path.normpath(
                 os.getcwd() + os.sep + os.pardir + os.sep + 'images' + os.sep + 'user' + os.sep + name + os.sep + name_default_avatar)
+            print(f'{destination_image_path} destination image path')
             print(os.getcwd(), ' My path to database file')
+            print()
             if os.path.isfile(default_image_src):
                 if not os.path.exists(destination_image_path.rsplit(os.sep, 1)[0]):
                     os.makedirs(destination_image_path.rsplit(os.sep, 1)[0])
@@ -711,7 +716,7 @@ class MainDataBase:
         :param id:
         :return str:
         """
-        corpus_row = self.session.query(self.Corpus).filter_by(id=id).fisrt()
+        corpus_row = self.session.query(self.Corpus).filter_by(id=id).first()
         self.session.delete(corpus_row)
         self.session.commit()
         return corpus_row.image
@@ -729,7 +734,6 @@ class MainDataBase:
                 'description': element.description,
                 'address': element.address,
                 'coords': element.coords,
-                'create_date': element.create_date,
                 'image': element.image
             }
             for element in corpus.all()]
@@ -767,6 +771,24 @@ class MainDataBase:
         self.session.commit()
         return building.image
 
+    def get_buildings_id(self, corpus_id) -> list:
+        """
+
+        :param corpus_id:
+        :return:
+        """
+        buildings = self.session.query(self.Building).filter_by(id=corpus_id)
+        return [
+            {
+                'id': element.id,
+                'corpus_id': element.corpus_id,
+                'name': element.name,
+                'address': element.address,
+                'description': element.description,
+                'image': element.image
+            }
+            for element in buildings.all()]
+
     def get_buildings(self) -> list:
         """
 
@@ -776,6 +798,7 @@ class MainDataBase:
         return [
             {
                 'id': element.id,
+                'corpus_id': element.corpus_id,
                 'name': element.name,
                 'address': element.address,
                 'description': element.description,

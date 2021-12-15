@@ -23,15 +23,12 @@ log = logging.getLogger('server')
 
 
 class Server:
-    def __init__(self, listen_address, listen_port):
+    def __init__(self, listen_address='192.168.1.11', listen_port=8760):
         super().__init__()
         self.clients = []
         self.database = MainDataBase()
-        self.red = redis.Redis(host='192.168.1.6')
+        self.red = redis.Redis(host='192.168.1.8')
         self.path_img = ''
-        self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        self.ssl_context.load_cert_chain(pathlib.Path(__file__).
-                                         with_name('cleanCert.pem'))
         self.address = listen_address
         self.port = listen_port
         self.running = True
@@ -82,7 +79,13 @@ class Server:
                 GET_BYPASS_STATUS_POSTS:
             response = request
         elif ACTION in request and request[ACTION] == \
+                GET_CORPUS_SYNCHRONIZE:
+            response = request
+        elif ACTION in request and request[ACTION] == \
                 GET_OBJECTS_SYNCHRONIZE:
+            response = request
+        elif ACTION in request and request[ACTION] == \
+                'GET_OBJECTS_SYNCHRONIZE_ID':
             response = request
         elif ACTION in request and request[ACTION] == \
                 GET_POSTS_SYNCHRONIZE:
@@ -370,6 +373,7 @@ class Server:
                     #                     MESSAGE: is_user_exists if is_user_exists else request}))
                     log.info(request)
                 elif ACTION in request and request[ACTION] == ADD_CORPUS:
+                    print('I am here!! in add_corpus action')
                     self.path_img = self.get_full_path(request)
                     # before how creating i need know about exists a corpus
                     if self.path_img is not None:
@@ -676,7 +680,9 @@ class Server:
                                                 updated_elements=updated_elements)
 
                 elif ACTION in request and request[ACTION] == GET_CORPUS:
+                    print('Hell before real hell')
                     corpus = self.database.get_corpus()
+                    print('Hell')
                     client_elements = request[LOCAL_DATABASE]
                     client_server = client_elements + corpus
                     added_elements = self.get_list_elements(client_server,
@@ -687,6 +693,44 @@ class Server:
                                                 added_elements,
                                                 removed_elements,
                                                 websocket,
+                                                updated_elements=[])
+                elif ACTION in request and request == 'GET_CORPUS':
+                    corpuses = self.database.get_corpus()
+                    client_elements = request[LOCAL_DATABASE]
+                    client_server = client_elements + corpuses
+                    added_elements = self.get_list_elements(client_server,
+                                                            client_elements)
+                    removed_elements = self.get_list_elements(client_server,
+                                                              corpuses)
+                    await self.refresh_elements('GET_CORPUSES_SYNCHRONIZE',
+                                                added_elements,
+                                                removed_elements,
+                                                websocket,
+                                                updated_elements=[])
+                elif ACTION in request and request[ACTION] == 'GET_OBJECT_BY_ID':
+                    # get elements from server database
+                    buildings = self.database.get_buildings_id(request['TARGET_ID'])
+
+                    # record elements from client app
+                    client_elements = request[LOCAL_DATABASE]
+
+                    # unite elements with server and with client databases
+                    client_server = client_elements + buildings
+
+                    # add elements on client which not to server
+                    added_elements = self.get_list_elements(client_server,
+                                                            client_elements)
+
+                    # remove elements on client app which not to server
+                    removed_elements = self.get_list_elements(client_server,
+                                                              buildings)
+
+                    print(f'{added_elements} add {removed_elements} remove')
+                    await self.refresh_elements('GET_OBJECTS_SYNCHRONIZE_ID',
+                                                added_elements,
+                                                removed_elements,
+                                                websocket,
+                                                target_id=request['TARGET_ID'],
                                                 updated_elements=[])
                 elif ACTION in request and request[ACTION] == GET_OBJECTS:
                     # get elements from server database
@@ -1211,6 +1255,8 @@ class Server:
 if __name__ == '__main__':
     print(os.path.normpath(os.path.dirname(os.path.abspath(__file__)) +
                            os.sep + os.pardir))
+    address = '192.168.1.11'
+    port = 8760
     if sys.argv and len(sys.argv):
         if '-a' in sys.argv:
             address = sys.argv[2]
@@ -1218,7 +1264,7 @@ if __name__ == '__main__':
             port = int(sys.argv[4])
             print(type(port))
 
-    server = Server('192.168.1.12', 8760)
+    server = Server(address, port)
     server.start()
 
     print(sys.argv)
