@@ -1952,6 +1952,82 @@ class MainDataBase:
         }
             for el in qrt]
 
+    def get_list_corpus(self, start_time, end_time):
+        start_time_str = start_time if start_time else get_today()
+        end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+
+        qrt = self.engine.execute(
+            QUERY_GET_CORPUS_BASE_INFO.format(
+                start_time_str,
+                end_time_str))
+
+        return [
+            {
+                'id': int(el.corpus_id),
+                'name': el.corpus_name,
+                'avg_rank': float(el.avg_rank),
+                'count_bypass': int(el.count_bypass),
+                'time_bypasses': int(el.time_bypasses),
+                'count_cycle': int(el.count_cycle),
+                'time_between_bypass': el.time_between_bypass,
+                'min_rank_building': float(el.min_rank_building),
+                'bad_building': el.bad_building,
+                'max_rank_building': float(el.max_rank_building),
+                'best_building': el.best_building
+            } for el in qrt.all()]
+
+
+    def get_buildings_corpus_id(self, period, corpus_id, start_time, end_time) -> list:
+        """
+
+        :param object_name:
+        :param period:
+        :return:
+        """
+
+        if period == 'today':
+            return self.get_list_building_for_corpus_id(corpus_id, get_today() - TODAY_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'week':
+            return self.get_list_building_for_corpus_id(corpus_id, get_today() - WEEK_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'month':
+            return self.get_list_building_for_corpus_id(corpus_id, get_today() - MONTH_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'year':
+            return self.get_list_building_for_corpus_id(corpus_id, get_today() - YEAR_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        else:
+            start_time_str = start_time if start_time else get_today()
+            end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+            return self.get_list_building_for_corpus_id(corpus_id, start_time_str, end_time_str)
+
+    def get_list_building_for_corpus_id(self, corpus_id, start_time, end_time):
+        start_time_str = start_time if start_time else get_today()
+        end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+
+        qrt = self.engine.execute(
+            QUERY_GET_OBJECTS_FOR_CORPUS.format(corpus_id, start_time_str, 
+                                                end_time_str)).all()
+        return [{
+            'id': str(time() + random.randint(1, 15000)),
+            'title': el[1],
+            'avgRanks': self._to_fixed(el[8], 1),
+            'countBypass': el[7],
+            'countTime': el[6],
+            'bestPost': el[2],
+            'bestRank': self._to_fixed(el[3], 1),
+            'badPost': el[4],
+            'badRank': self._to_fixed(el[5], 1),
+            'countCircle': '-',
+            'steps': '-',
+            'trand': 1,
+            'building_id': el[0],
+            'cycle': el[9],
+            'time_between_bypass': el[10]
+        }
+            for el in qrt]
+        
     def get_list_objects(self, is_time) -> list:
         """
 

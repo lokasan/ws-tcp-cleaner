@@ -27,7 +27,7 @@ class Server:
         super().__init__()
         self.clients = []
         self.database = MainDataBase()
-        self.red = redis.Redis(host='192.168.1.14')
+        self.red = redis.Redis(host='192.168.1.9')
         self.path_img = ''
         self.address = listen_address
         self.port = listen_port
@@ -143,6 +143,10 @@ class Server:
         elif ACTION in request and request[ACTION] == 'GET_IMAGE_BYPASS_USER_OF_POST_COUNT':
             response = request
         elif ACTION in request and request[ACTION] == 'GET_STATUS_COMPONENT_FOR_BUILDING':
+            response = request
+        elif ACTION in request and request[ACTION] == 'GET_BYPASS_CORPUS_BASE':
+            response = request
+        elif ACTION in request and request[ACTION] == 'GET_BYPASS_STATUS_OBJECT':
             response = request
         else:
             response = {RESPONSE: ERROR}
@@ -1151,16 +1155,16 @@ class Server:
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        photo_dict))
+                    
                 elif ACTION in request and request[ACTION] == GET_SINGLE_USER_STAT:
                     user_stat = self.database.get_response_for_universal_query(request[USER_ID])
                     stat_dict = {
                         ACTION: GET_SINGLE_USER_STAT,
                         MESSAGE: user_stat
                     }
-                    with open('testik.txt', 'w', encoding='utf-8') as f:
-                        f.write(str(user_stat))
                     await send_msg(websocket,
                                    await self.process_client_message(stat_dict))
+                    
                 elif ACTION in request and request[ACTION] == GET_USERS_BASIC_STAT:
 
                     users_basic_stat = self.database.get_status_user_basic(
@@ -1251,6 +1255,30 @@ class Server:
                     await send_msg(websocket,
                                    await self.process_client_message(
                                        components_dict))
+                    
+                elif ACTION in request and request[ACTION] == 'GET_BYPASS_CORPUS_BASE':
+                    corpuses = self.database.get_list_corpus(request[START_TIME],
+                                                             request[END_TIME])
+                    corpuses_dict = {
+                        ACTION: 'GET_BYPASS_CORPUS_BASE',
+                        MESSAGE: corpuses
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       corpuses_dict))
+                elif ACTION in request and request[ACTION] == 'GET_BYPASS_BUILDING_FOR_CORPUS':
+                    buildings = self.database.get_buildings_corpus_id(request[PERIOD],
+                                                                      request[TARGET_ID],
+                                                                      request[START_TIME],
+                                                                      request[END_TIME])
+                    buildings_list = {
+                        ACTION: 'GET_BYPASS_STATUS_OBJECT',
+                        MESSAGE: buildings
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(
+                                       buildings_list
+                                   ))
         finally:
             print('FINISHED HIM', websocket)
             await self.unregister(websocket)

@@ -322,6 +322,58 @@ where b5.rank =
             count, AVG(rank) avg_rank, coalesce(cnt, 0) as "cycle" from temp_req b1 left join cycle_for_buildings as cfb on cfb.building_id = b1.building_id group by build_name, b1.building_id, cnt)
 select pre_res.building_id, build_name, best_post, best_rank, bad_post, bad_rank, times, count, avg_rank, "cycle", coalesce(time_between_bypass, 0) as time_between_bypass from pre_res left join cycle_table_final on cycle_table_final.building_id = pre_res.building_id;
 '''
+QUERY_GET_OBJECTS_FOR_CORPUS = '''
+with temp_req as (select building.id as building_id_main, building.name as build_name, p.name as post_name, AVG(cr.rank::decimal) rank, 
+        SUM(DISTINCT b.end_time::bigint - b.start_time::bigint) time_bypasses, 
+        COUNT(DISTINCT  b.id) count_bypass, building.id as building_id from building 
+        left join post p on building.id = p.building_id 
+        left join bypass b on p.id = b.post_id 
+        left join bypass_rank br on b.id = br.bypass_id 
+        left join component_rank cr 
+        on br.component_rank_id = cr.id 
+        left join component c on br.component_id = c.id 
+        left join public.user u on u.id = b.user_id 
+        left join corpus on corpus.id = building.corpus_id
+        WHERE b.finished=1 and corpus.id = {0} and b.end_time::bigint >= {1} and b.end_time::bigint <= {2}
+        GROUP BY p.id, build_name, building.id),
+cycle_for_buildings as (select building_id, count(*) as cnt 
+	from user_cycle_of_bypass ucob2 
+	where end_time::bigint >= {1} and end_time::bigint <= {2}
+	group by building_id),
+	cycle_table as (
+select 
+ucob.user_id, 
+building_id, end_time, 
+create_date_row, 
+max(create_date::bigint)::bigint as create_date
+from user_cycle_of_bypass ucob 
+left join user_shift us on us.user_id = ucob.user_id and ucob.end_time > us.create_date 
+where end_time::bigint >= {1} and end_time::bigint <= {2}
+group by ucob.user_id, building_id, end_time, create_date_row order by create_date desc),
+cycle_table2 as (
+select cycle_table.user_id, building_id, end_time, create_date_row, cycle_table.create_date, cycle_table.create_date_row + to_timestamp(start_shift::bigint /1000.0 + 10800)::time start_shift from cycle_table left join user_shift us on us.create_date::bigint = cycle_table.create_date::bigint order by end_time),
+cycle_table_bbb as (
+select *, abs(end_time::bigint - lag(end_time::bigint) over(partition by user_id, building_id, create_date_row)) as bbb from cycle_table2),
+cycle_table_pre_res as (
+select building_id, case when bbb is null then abs(extract(epoch from start_shift) * 1000 - end_time::bigint - 10800000) else bbb end as bbb from cycle_table_bbb),
+cycle_table_final as (
+select building_id, avg(bbb)::bigint as time_between_bypass from cycle_table_pre_res group by building_id),
+pre_res as (
+select b1.building_id, build_name, (select b5.post_name 
+from temp_req b5 
+where b5.rank = 
+(select max(rank) from temp_req b5 where b1.build_name = b5.build_name) and b1.build_name = b5.build_name limit 1) as 
+            best_post, (select max(rank) from temp_req tv where b1.build_name = tv.build_name limit 1) best_rank,
+            (select b2.post_name 
+            from temp_req b2 where b2.rank = 
+            (select min(rank) from temp_req b2 where b1.build_name = b2.build_name) and b1.build_name = b2.build_name limit 1) 
+            as bad_post, (select min(rank) 
+            from temp_req b2 where b1.build_name = b2.build_name limit 1) bad_rank, 
+            SUM(time_bypasses::integer) times, SUM(count_bypass::integer) 
+            count, AVG(rank) avg_rank, coalesce(cnt, 0) as "cycle" from temp_req b1 left join cycle_for_buildings as cfb on cfb.building_id = b1.building_id group by build_name, b1.building_id, cnt)
+select pre_res.building_id, build_name, best_post, best_rank, bad_post, bad_rank, times, count, avg_rank, "cycle", coalesce(time_between_bypass, 0) as time_between_bypass from pre_res left join cycle_table_final on cycle_table_final.building_id = pre_res.building_id;
+
+'''
 
 QUERY_GET_POSTS = "SELECT (select ident from public.temporary_view_detail limit 1), (select building_name from public.temporary_view_detail limit 1), b1.post_name post_name, " \
             "(select component_name from public.temporary_view_detail b3 where b3.rank = (" \
@@ -782,6 +834,63 @@ select
 compressed_component_list as (
 select building_id, component_id, component_name, round(avg(component_rank_rank::numeric), 1) as avg_rank_component, count(bypass_rank_id) count_bypass_rank, sum(distinct end_time::bigint - start_time::bigint) as time_bypasses_component, round(avg_rank::numeric, 1) avg_rank from component_list group by building_id, component_id, component_name, avg_rank)
 select *, sum(time_bypasses_component) over() sum_time_bypasses_component, sum(count_bypass_rank) over () as sum_qr_scan_component from compressed_component_list ;
+"""
+
+QUERY_GET_CORPUS_BASE_INFO = """
+with 
+building_list as (
+	select distinct on(corpus.id) corpus."name" corpus_name, corpus.id as corpus_id, b.id as building_id from corpus left join building b on corpus.id = b.corpus_id), 	
+temp_req as (select corp.id, corp."name" as corpus_name, AVG(cr.rank::decimal) avg_rank, 
+    SUM(DISTINCT b.end_time::bigint - b.start_time::bigint) time_bypasses, 
+    COUNT(DISTINCT  b.id) count_bypass from building 
+    left join post p on building.id = p.building_id 
+    left join bypass b on p.id = b.post_id 
+    left join bypass_rank br on b.id = br.bypass_id 
+    left join component_rank cr 
+    on br.component_rank_id = cr.id 
+    left join component c on br.component_id = c.id 
+    left join public.user u on u.id = b.user_id 
+    left join corpus corp on corp.id = building.corpus_id
+    WHERE b.finished=1 and b.end_time::bigint between {0} and {1} 
+    GROUP BY corp.id),
+cycle_for_buildings as (select building_id, count(*) as cnt 
+	from user_cycle_of_bypass ucob2 
+	where end_time::bigint between {0} and {1}
+	group by building_id),
+cycle_table as (
+	select 
+	ucob.user_id, 
+	building_id, end_time, 
+	create_date_row, 
+	max(create_date::bigint)::bigint as create_date
+	from user_cycle_of_bypass ucob 
+	left join user_shift us on us.user_id = ucob.user_id and ucob.end_time > us.create_date 
+	where end_time::bigint between {0} and {1}
+	group by ucob.user_id, building_id, end_time, create_date_row order by create_date desc),
+cycle_table2 as (
+	select cycle_table.user_id, building_id, end_time, create_date_row, cycle_table.create_date, cycle_table.create_date_row + to_timestamp(start_shift::bigint /1000.0 + 10800)::time start_shift from cycle_table left join user_shift us on us.create_date::bigint = cycle_table.create_date::bigint order by end_time),
+cycle_table_bbb as (
+	select *, abs(end_time::bigint - lag(end_time::bigint) over(partition by user_id, building_id, create_date_row)) as bbb from cycle_table2),
+cycle_table_pre_res as (
+	select building_id, case when bbb is null then abs(extract(epoch from start_shift) * 1000 - end_time::bigint - 10800000) else bbb end as bbb from cycle_table_bbb),
+cycle_table_final as (
+	select bul.corpus_id, building_id, avg(bbb)::bigint as time_between_bypass from cycle_table_pre_res left join building bul on bul.id = building_id left join corpus on corpus.id = bul.corpus_id group by  bul.corpus_id, building_id),
+pre_compose_corpus_set as (
+	select building_list.corpus_id, building_list.corpus_name, avg_rank, time_bypasses, count_bypass, time_between_bypass from building_list left join temp_req on temp_req.id = building_list.corpus_id left join cycle_table_final on temp_req.id = cycle_table_final.corpus_id),
+output_avg_rank_building as (
+	select distinct building.corpus_id, building.id as building_id, building.name as building_name, round(avg(cr."rank"::decimal), 1) as avg_rank, count(distinct ucob1.id) as count_cycle from bypass 
+	left join post on post.id = bypass.post_id left join building on building.id = post.building_id 
+	left join bypass_rank br on br.bypass_id = bypass.id left join component_rank cr on cr.id = br.component_rank_id 
+	left join user_cycle_of_bypass ucob1 on ucob1.building_id = building.id
+	where bypass.finished = 1 and bypass.end_time::bigint between {0} and {1} and ucob1.end_time::bigint between {0} and {1} group by building.corpus_id, building.id),
+output_min_rank_building as (
+	select oarb1.corpus_id, min(oarb1.avg_rank) as min_rank_building, (select building_name from output_avg_rank_building oarb2 where oarb2.avg_rank = 
+	(select min(avg_rank) from output_avg_rank_building oarb2 where oarb1.corpus_id = oarb2.corpus_id) and oarb1.corpus_id = oarb2.corpus_id limit 1) as bad_building from output_avg_rank_building oarb1 group by corpus_id),
+output_max_rank_building as (
+	select oarb1.corpus_id, max(oarb1.avg_rank) as max_rank_building, sum(count_cycle) as count_cycle, (select building_name from output_avg_rank_building oarb2 where oarb2.avg_rank = 
+	(select max(avg_rank) from output_avg_rank_building oarb2 where oarb1.corpus_id = oarb2.corpus_id) and oarb1.corpus_id = oarb2.corpus_id limit 1) as best_building from output_avg_rank_building oarb1 group by corpus_id)
+select pre_compose_corpus_set.corpus_id, corpus_name, round(coalesce(pre_compose_corpus_set.avg_rank, 0), 1) avg_rank, coalesce(count_bypass, 0) count_bypass, coalesce(time_bypasses, 0) time_bypasses, coalesce(count_cycle, 0) count_cycle, coalesce(time_between_bypass, 0) time_between_bypass, coalesce(min_rank_building, 0) min_rank_building, coalesce(bad_building, '0') bad_building, coalesce(max_rank_building, 0) max_rank_building, coalesce(best_building, '0') best_building 
+from pre_compose_corpus_set left join output_min_rank_building omrb on omrb.corpus_id = pre_compose_corpus_set.corpus_id left join output_max_rank_building omaxrb on omaxrb.corpus_id = pre_compose_corpus_set.corpus_id;
 """
 
 from time import time
