@@ -27,7 +27,7 @@ class Server:
         super().__init__()
         self.clients = []
         self.database = MainDataBase()
-        self.red = redis.Redis(host='192.168.1.9')
+        self.red = redis.Redis(host='192.168.1.8')
         self.path_img = ''
         self.address = listen_address
         self.port = listen_port
@@ -147,6 +147,12 @@ class Server:
         elif ACTION in request and request[ACTION] == 'GET_BYPASS_CORPUS_BASE':
             response = request
         elif ACTION in request and request[ACTION] == 'GET_BYPASS_STATUS_OBJECT':
+            response = request
+        elif ACTION in request and request[ACTION] == 'GET_STATUS_USER_WITH_TBR_CORPUS':
+            response = request
+        elif ACTION in request and request[ACTION] == 'GET_STATUS_USER_WITH_TBR_CORPUS_DETAIL':
+            response = request
+        elif ACTION in request and request[ACTION] == 'GET_POSTS_FOR_CORPUS_SYNCHRONIZE':
             response = request
         else:
             response = {RESPONSE: ERROR}
@@ -795,6 +801,34 @@ class Server:
 
                     print(posts)
                     # await self.refresh_elements(GET_POSTS, posts)
+                elif ACTION in request and request[ACTION] == 'GET_POSTS_FOR_CORPUS':
+                    # get elements from server database
+                    print(request)
+                    posts = self.database.get_posts_for_corpus(request[MESSAGE])
+
+                    # record elements from client app
+                    client_elements = request[LOCAL_DATABASE]
+
+                    # unite elements with server and with client databases
+                    client_server = client_elements + posts
+
+                    # add elements on client which not to server
+                    added_elements = self.get_list_elements(client_server,
+                                                            client_elements)
+
+                    # remove elements on client app which not to server
+                    removed_elements = self.get_list_elements(client_server,
+                                                              posts)
+
+                    print(f'{added_elements} add {removed_elements} remove')
+
+                    await self.refresh_elements('GET_POSTS_FOR_CORPUS_SYNCHRONIZE',
+                                                added_elements,
+                                                removed_elements,
+                                                websocket,
+                                                request[MESSAGE],
+                                                updated_elements=[])
+                    
                 elif ACTION in request and request[ACTION] == 'GET_ALL_POSTS_FROM_SERVER':
                     posts_all = self.database.get_all_posts()
                     # record elements from client app
@@ -1279,6 +1313,34 @@ class Server:
                                    await self.process_client_message(
                                        buildings_list
                                    ))
+                elif ACTION in request and request[ACTION] == 'GET_STATUS_USER_WITH_TBR_CORPUS':
+                    users = self.database.get_status_user_with_tbr_corpus(
+                        request[PERIOD],
+                        request['CORPUS_ID'],
+                        request[START_TIME],
+                        request[END_TIME]
+                    )
+                    users_list = {
+                        ACTION: 'GET_STATUS_USER_WITH_TBR_CORPUS',
+                        MESSAGE: users
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(users_list))
+
+                elif ACTION in request and request[ACTION] == 'GET_STATUS_USER_WITH_TBR_CORPUS_DETAIL':
+                    users_detail = self.database.get_status_user_with_tbr_corpus_detail(
+                        request[PERIOD],
+                        request['CORPUS_ID'],
+                        request['USER_ID'],
+                        request[START_TIME],
+                        request[END_TIME]
+                    )
+                    users_detail_list = {
+                        ACTION: 'GET_STATUS_USER_WITH_TBR_CORPUS_DETAIL',
+                        MESSAGE: users_detail
+                    }
+                    await send_msg(websocket,
+                                   await self.process_client_message(users_detail_list))
         finally:
             print('FINISHED HIM', websocket)
             await self.unregister(websocket)

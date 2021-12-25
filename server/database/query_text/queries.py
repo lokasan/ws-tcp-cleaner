@@ -893,6 +893,227 @@ select pre_compose_corpus_set.corpus_id, corpus_name, round(coalesce(pre_compose
 from pre_compose_corpus_set left join output_min_rank_building omrb on omrb.corpus_id = pre_compose_corpus_set.corpus_id left join output_max_rank_building omaxrb on omaxrb.corpus_id = pre_compose_corpus_set.corpus_id;
 """
 
+QUERY_GET_STATIC_BY_USER_WITH_TBR_CORPUS = """
+with 
+	cnt_by_bypasses as (
+		select user_id, building_id, count(*) as cnt 
+		from user_cycle_of_bypass ucob2 
+		left join building bul on bul.id = building_id
+		where end_time::bigint between {0} and {1} and bul.corpus_id = {2}
+		group by user_id, building_id
+	),
+	user_and_bypass as (
+		select "user".id user_id, post.id post_id
+		from "user", post 
+		left join building b2 on b2.id = post.building_id
+		order by "user".id
+	),
+	pre_result as(
+		select 
+			u.id, 
+			count(distinct cbb.building_id) "cycle",
+			round(avg(cr.rank::numeric), 1) AS avg_rank, 
+			COUNT(DISTINCT b.id) count_bypass,
+			SUM(distinct b.end_time::BIGINT - b.start_time::BIGINT) AS time_bypass,
+			u.surname as surname, u.name as first_name, u.lastname
+		from bypass_rank br
+		LEFT JOIN 
+			bypass b 
+		ON 
+			b.id = br.bypass_id
+		LEFT JOIN 
+			"user" u 
+		ON 
+			b.user_id = u.id 
+		left join post p 
+		on p.id = b.post_id 
+		left join building bul on bul.id = p.building_id 
+		left join cnt_by_bypasses cbb on cbb.building_id = bul.id
+		AND 
+			b.finished = 1 
+		AND 
+			b.end_time::BIGINT between {0} and {1}
+		LEFT JOIN 
+			component_rank cr 
+		ON 
+			cr.id = br.component_rank_id 
+		where p.id is not null and bul.corpus_id = {2} and b.end_time::BIGINT between {0} and {1}
+		GROUP BY 
+			u.id, u.surname, u.name, u.lastname
+		),
+		get_all_bp as (
+	select
+		distinct on(b.id)
+		b.id,
+		b.user_id, 
+		post_id, 
+		start_time::bigint, 
+		end_time::bigint, 
+		max(us.create_date) over(partition by b.id) as create_date,
+		to_timestamp(end_time::bigint / 1000.0)::date as anchor,
+		us.start_shift
+	from 
+		bypass b left join post p on p.id = b.post_id left join building bul on bul.id = p.building_id, 
+		user_shift us
+	where 
+		b.user_id = us.user_id
+	and 
+		us.create_date::bigint < b.start_time::bigint
+	and
+	b.end_time::BIGINT between {0} and {1}
+		and
+		b.finished = 1
+		and bul.corpus_id = {2}
+	group by b.id, us.start_shift, us.create_date 
+),
+get_result_with_bbb as (
+	select pre_result.id, avg_rank, count_bypass, count("cycle") as "cycle", time_bypass, ucob.user_id, ucob.end_time, abs(ucob.end_time::bigint - lag(ucob.end_time::bigint) over(partition by ucob.user_id, create_date_row)) as bbb, 
+	 create_date_row, get_all_bp.create_date, min(get_all_bp.start_time) start_time from pre_result 
+left join user_cycle_of_bypass ucob on ucob.user_id = pre_result.id and ucob.end_time::BIGINT between {0} and {1}
+join get_all_bp on pre_result.id = get_all_bp.user_id
+left join building bul on bul.id = ucob.building_id where bul.corpus_id = {2}
+group by pre_result.id, avg_rank, count_bypass, "cycle", time_bypass, ucob.user_id, ucob.end_time, create_date_row, get_all_bp.create_date
+),
+get_create_date_calc as (select 
+	get_result_with_bbb.id,  
+	start_time,
+	end_time, 
+	get_result_with_bbb.create_date_row, 
+	case when bbb is null then 0 else bbb end,
+	get_result_with_bbb.create_date_row + to_timestamp(us.start_shift::bigint /1000.0  + 10800)::time start_shift 
+	from get_result_with_bbb 
+	left join user_shift us on us.create_date = get_result_with_bbb.create_date
+	),
+final_table as (
+	select *, case when bbb = 0 then abs((extract(epoch from start_shift) * 1000 - end_time::bigint - 10800000)) else bbb end as result_bbb from get_create_date_calc as gcdc
+),
+time_around_cycle as (
+	select 
+	ucob.user_id, 
+	end_time, 
+	extract(epoch from ucob.create_date_row  + to_timestamp(start_shift::bigint / 1000)::time) * 1000 as start_shift, 
+	abs(ucob.end_time::bigint - lag(ucob.end_time::bigint) over(partition by ucob.user_id, ucob.create_date_row, ucob.building_id)) as tbr 
+	from building b 
+	right join user_cycle_of_bypass ucob on ucob.building_id = b.id 
+	left join user_shift us on us.user_id = ucob.user_id and ucob.end_time > us.create_date
+	left join building bul on bul.id = ucob.building_id where bul.corpus_id = {2}),
+time_cycle_pre_final as (
+	select user_id, case when tbr is null then abs(start_shift::bigint - end_time::bigint) else tbr end as tbr from time_around_cycle),
+time_cycle_final as (
+	select user_id, round(avg(tbr), 0) as tbr from time_cycle_pre_final group by user_id)
+select pre_result.id, avg_rank, count_bypass, coalesce("cycle", 0) as "cycle", case when tcf.tbr is null then 0 else tcf.tbr end, pre_result.surname, pre_result.first_name, pre_result.lastname, pre_result.time_bypass from pre_result
+left join final_table ft on ft.id = pre_result.id
+left join time_cycle_final tcf on pre_result.id = tcf.user_id
+group by pre_result.id, pre_result.avg_rank, pre_result.count_bypass, pre_result."cycle", pre_result.time_bypass, pre_result.surname, pre_result.first_name, pre_result.lastname, tcf.tbr;
+"""
+QUERY_GET_STATIC_BY_USER_WITH_TBR_CORPUS_DETAIL = """
+with user_bypass as (
+select distinct u.id as user_id, building.id as building_id, p.id post_id, b.id as bypass_id, c.id as component_id, cr.id as component_rank_id, br.id as bypass_rank_id, u.surname, u.name as user_name, 
+    u.lastname, u.email, p.name as post_name, c.name as component_name, 
+    cr.rank::decimal rank_component, SUM(DISTINCT b.end_time::bigint - b.start_time::bigint) time_bypasses, 
+    COUNT(DISTINCT  b.id) count_bypass, cleaner, b.start_time, b.end_time, to_timestamp(((3 * 60 * 60 * 1000) + b.end_time::bigint) / 1000.0)::date as anchor, b.temperature temperature, max(us.create_date) over(partition by b.id) as create_date, avg(cr."rank"::float) over(partition by p.id) as avg_rank_post from building left join post p
+    on building.id = p.building_id left join bypass b on p.id = b.post_id 
+    left join bypass_rank br on b.id = br.bypass_id left join component_rank 
+    cr on br.component_rank_id = cr.id left join component c 
+    on br.component_id = c.id left join public.user u on b.user_id = u.id 
+    left join user_shift us on us.create_date::bigint < b.start_time::bigint
+    WHERE b.finished=1 and u.id = {0}  and b.end_time::bigint between {2} and {3} and building.corpus_id = {1}
+    GROUP BY u.id, p.id, c.id, b.id, building.id, cr.component_id, br.id, cr.id, us.create_date),
+table_main as (
+	select 
+	user_bypass.user_id, 
+	building_id, 
+	post_id, 
+	bypass_id, 
+	component_id, 
+	component_rank_id, 
+	bypass_rank_id, 
+	surname, 
+	user_name, 
+	lastname, 
+	email, 
+	post_name, 
+	component_name, 
+	rank_component, 
+	time_bypasses, 
+	count_bypass, 
+	cleaner, 
+	start_time, 
+	end_time, 
+	temperature, 
+	user_bypass.create_date, 
+	anchor as start_shift,
+	avg_rank_post
+	from user_bypass 
+	left join user_shift us on us.create_date = user_bypass.create_date),
+table_help as (select c.id as component_id, cr.id as component_rank_id_help, "rank" all_rank from component as c left join component_rank as cr on c.id = cr.component_id),
+pre_result as (select tul.email, tul.bypass_id, tul.component_id, min(all_rank) as "rank" from table_main as tul left join table_help th on th.component_id = tul.component_id
+		and tul.bypass_id > component_rank_id_help 
+		group by tul.bypass_id, tul.component_id, email),
+	clear_best_single_rank as (select * from pre_result where "rank"::float != 5.0),
+is_min_rank as (
+	select user_id, 
+	building_id, 
+	post_id, 
+	table_main.bypass_id, 
+	table_main.component_id, 
+	component_rank_id, 
+	bypass_rank_id, 
+	surname, 
+	user_name, 
+	lastname, 
+	table_main.email, 
+	post_name, 
+	component_name, 
+	rank_component, 
+	time_bypasses, 
+	count_bypass, 
+	cleaner, 
+	start_time, 
+	end_time, 
+	temperature, 
+	create_date, 
+	start_shift,
+	case when cbsr."rank"::float = table_main.rank_component::float then 1 else 0 end as is_minimal_rank, avg_rank_post from table_main left join clear_best_single_rank cbsr on table_main.bypass_id = cbsr.bypass_id and table_main.component_id = cbsr.component_id order by bypass_id asc
+),
+table_for_compressed_bypass as (
+	select post_id, bypass_id, start_time, end_time, count(*), start_shift from table_main group by post_id, bypass_id, start_time, end_time, start_shift order by post_id
+),
+table_for_bypass_by_bypass as (
+	select *, abs(start_time::bigint - lag(end_time::bigint) over(partition by post_id, start_shift)) as avg_bp_by_bp from table_for_compressed_bypass
+),
+table_for_bypass_by_bypass_two as (
+	select post_id, bypass_id, start_time, end_time, start_shift, (sum(avg_bp_by_bp) over(partition by post_id)/count(*) over(partition by post_id))::bigint  as avg_bp_by_bp from table_for_bypass_by_bypass
+),
+table_for_bypass_by_bypass_group as (
+	select post_id, avg_bp_by_bp from table_for_bypass_by_bypass_two group by post_id, avg_bp_by_bp
+),
+compressed_row as (
+select user_id, building_id,
+	is_min_rank.post_id, 
+	is_min_rank.component_id, 
+	surname, 
+	user_name, 
+	lastname,
+	email, 
+	post_name, 
+	component_name, 
+	round(avg_rank_post::decimal, 1)::float as avg_rank_post,
+	round(avg(rank_component), 1) avg_rank_component,
+	sum(count_bypass) as count_bypass,
+	round((sum(cleaner)::numeric / count(is_min_rank.bypass_id)::numeric) * 100) || '%%' as percent_cleaner, 
+	sum(distinct time_bypasses) as time_bypasses,
+	case when avg_bp_by_bp is null then 0 else avg_bp_by_bp end as avg_bp_by_bp,
+	round(avg(temperature)) as avg_temperature,
+	sum(is_min_rank.is_minimal_rank) as count_bad_rank_component from is_min_rank left join table_for_bypass_by_bypass_group as tfbg on tfbg.post_id = is_min_rank.post_id  group by user_id, is_min_rank.post_id, is_min_rank.component_id, surname, 
+	user_name, 
+	lastname, 
+	email, 
+	post_name, 
+	component_name, avg_rank_post, building_id, avg_bp_by_bp)
+select * from compressed_row;
+"""
+
 from time import time
 STATIC_DAY = int(time() * 1000) % 86400000
 TODAY_MILLISECONDS = 0

@@ -872,7 +872,22 @@ class MainDataBase:
                 'qrcode_img': el.qr_code_img
             }
             for el in posts.all()]
-    
+
+    def get_posts_for_corpus(self, corpus_id) -> list:
+        posts = self.session.query(self.Post).join(self.Building).filter_by(corpus_id=corpus_id)
+
+        return [
+            {
+                'building_id': el.building_id,
+                'id': el.id,
+                'name': el.name,
+                'description': el.description,
+                'image': el.image,
+                'qrcode': el.qr_code,
+                'qrcode_img': el.qr_code_img
+            }
+            for el in posts.all()]
+
     def get_all_posts(self) -> list:
         posts_all = self.session.query(self.Post)
         return [
@@ -1976,12 +1991,13 @@ class MainDataBase:
                 'best_building': el.best_building
             } for el in qrt.all()]
 
-
     def get_buildings_corpus_id(self, period, corpus_id, start_time, end_time) -> list:
         """
 
-        :param object_name:
         :param period:
+        :param corpus_id:
+        :param start_time:
+        :param end_time:
         :return:
         """
 
@@ -2362,8 +2378,159 @@ class MainDataBase:
             start_time = get_today() - YEAR_MILLISECONDS
 
         return self.get_list_user_with_tbr_detail(user_id, building_id, start_time, end_time)
+    
+    def get_list_user_with_tbr_corpus(self, corpus_id, start_time, end_time):
+        """
 
+        :param corpus_id:
+        :param start_time:
+        :param end_time:
+        :return:
+        """
+        qrt = self.engine.execute(
+            QUERY_GET_STATIC_BY_USER_WITH_TBR_CORPUS.format(
+                start_time,
+                end_time,
+                corpus_id))
 
+        current_statistics = [
+            {
+                'id': el.id,
+                'avg_rank': float(el.avg_rank),
+                'count_bypass': el.count_bypass,
+                'cycle': el.cycle,
+                'time_between_bypass': int(el.tbr) if el.tbr else None,
+                'time_bypass': int(el.time_bypass),
+                'surname': el.surname,
+                'first_name': el.first_name,
+                'lastname': el.lastname,
+                'trand': 1
+            }
+            for el in qrt.all()]
+        print(f'this is tbr_corpus {current_statistics}')
+        return current_statistics
+    
+    def get_status_user_with_tbr_corpus(self, period, corpus_id, start_time, end_time) -> list:
+        """
+
+        :param period:
+        :param corpus_id:
+        :param start_time:
+        :param end_time:
+        :return:
+        """
+        print(f'period: {period}')
+        if period == 'today':
+            return self.get_list_user_with_tbr_corpus(corpus_id, get_today() - TODAY_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'week':
+            return self.get_list_user_with_tbr_corpus(corpus_id, get_today() - WEEK_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'month':
+            return self.get_list_user_with_tbr_corpus(corpus_id, get_today() - MONTH_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'year':
+            return self.get_list_user_with_tbr_corpus(corpus_id, get_today() - YEAR_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        else:
+            start_time_str = start_time if start_time else get_today()
+            end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+            return self.get_list_user_with_tbr_corpus(corpus_id, start_time_str, end_time_str)
+
+    def get_list_user_with_tbr_corpus_detail(self, corpus_id, user_id, start_time, end_time):
+        qrt = self.engine.execute(QUERY_GET_STATIC_BY_USER_WITH_TBR_CORPUS_DETAIL.
+                                  format(user_id, corpus_id, start_time,
+                                         end_time)).all()
+        print(f'{user_id} {corpus_id} EMAIL')
+        user_id_temp = 0
+        post_id_temp = 0
+        temp_list = []
+        my_dicts = []
+        print(f'{qrt} - This')
+        for idx in range(len(qrt)):
+            if post_id_temp == qrt[idx][2]:
+                print(
+                    'user_id_temp equal user_id & post_id_temp equal post_id')
+                my_dicts[str(qrt[idx][3])] = qrt[idx][9]
+                my_dicts[str(qrt[idx][3]) + '_rank'] = float(qrt[idx][11])
+                my_dicts[str(qrt[idx][3]) + 'count_bad_rank'] = float(
+                    qrt[idx][17])
+                print(my_dicts, 'my_dicts')
+            if not post_id_temp:
+                print('no id_temp')
+                my_dicts = {
+                    'user_id': qrt[idx][0],
+                    'building_id': qrt[idx][1],
+                    'post_id': qrt[idx][2],
+                    'component_id': qrt[idx][3],
+                    'surname': qrt[idx][4],
+                    'first_name': qrt[idx][5],
+                    'lastname': qrt[idx][6],
+                    'email': qrt[idx][7],
+                    'post_name': qrt[idx][8],
+                    str(qrt[idx][3]): qrt[idx][9],
+                    str(qrt[idx][3]) + '_rank': float(qrt[idx][11]),
+                    str(qrt[idx][3]) + 'count_bad_rank': qrt[idx][17],
+                    'avg_rank_post': float(qrt[idx][10]),
+                    'count_bypass': int(qrt[idx][12]),
+                    'cleaner': qrt[idx][13],
+                    'time_bypasses': int(qrt[idx][14]),
+                    'avg_bp_by_bp': float(qrt[idx][15]),
+                    'avg_temperature': int(qrt[idx][16]),
+                    'title': f'{qrt[idx][4]} {qrt[idx][5]} {qrt[idx][6]}'
+                }
+                user_id_temp = qrt[idx][0]
+                post_id_temp = qrt[idx][2]
+            if (post_id_temp != qrt[idx][2] and post_id_temp) or (
+                    len(qrt) - 1 == idx):
+                print('id_temp not equal bypass_id and not id_temp')
+                temp_list.append(my_dicts)
+                my_dicts = {
+                    'user_id': qrt[idx][0],
+                    'building_id': qrt[idx][1],
+                    'post_id': qrt[idx][2],
+                    'component_id': qrt[idx][3],
+                    'surname': qrt[idx][4],
+                    'first_name': qrt[idx][5],
+                    'lastname': qrt[idx][6],
+                    'email': qrt[idx][7],
+                    'post_name': qrt[idx][8],
+                    str(qrt[idx][3]): qrt[idx][9],
+                    str(qrt[idx][3]) + '_rank': float(qrt[idx][11]),
+                    str(qrt[idx][3]) + 'count_bad_rank': qrt[idx][17],
+                    'avg_rank_post': float(qrt[idx][10]),
+                    'count_bypass': int(qrt[idx][12]),
+                    'cleaner': qrt[idx][13],
+                    'time_bypasses': int(qrt[idx][14]),
+                    'avg_bp_by_bp': float(qrt[idx][15]),
+                    'avg_temperature': int(qrt[idx][16]),
+                    'title': f'{qrt[idx][4]} {qrt[idx][5]} {qrt[idx][6]}'
+                }
+                print(my_dicts)
+                if idx == len(qrt) - 1 and qrt[idx][0] != qrt[idx - 1][0]:
+                    temp_list.append(my_dicts)
+            user_id_temp = qrt[idx][0]
+            post_id_temp = qrt[idx][2]
+
+        return temp_list
+
+    def get_status_user_with_tbr_corpus_detail(self, period, corpus_id, user_id, start_time, end_time):
+        if period == 'today':
+            return self.get_list_user_with_tbr_corpus_detail(corpus_id, user_id, get_today() - TODAY_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'week':
+            return self.get_list_user_with_tbr_corpus_detail(corpus_id, user_id, get_today() - WEEK_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'month':
+            return self.get_list_user_with_tbr_corpus_detail(corpus_id, user_id, get_today() - MONTH_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        if period == 'year':
+            return self.get_list_user_with_tbr_corpus_detail(corpus_id, user_id, get_today() - YEAR_MILLISECONDS, get_today() +
+                                   TAIL_TODAY)
+        else:
+            start_time_str = start_time if start_time else get_today()
+            end_time_str = end_time + 86400000 if end_time else get_today() + 86400000
+            return self.get_list_user_with_tbr_corpus_detail(corpus_id,  user_id, start_time_str, end_time_str)
 if __name__ == '__main__':
     server = MainDataBase()
     # test = server.is_cleaner_on_bypass('1', 1625934870036)
