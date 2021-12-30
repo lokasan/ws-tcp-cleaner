@@ -874,7 +874,7 @@ cycle_table_bbb as (
 cycle_table_pre_res as (
 	select building_id, case when bbb is null then abs(extract(epoch from start_shift) * 1000 - end_time::bigint - 10800000) else bbb end as bbb from cycle_table_bbb),
 cycle_table_final as (
-	select bul.corpus_id, building_id, avg(bbb)::bigint as time_between_bypass from cycle_table_pre_res left join building bul on bul.id = building_id left join corpus on corpus.id = bul.corpus_id group by  bul.corpus_id, building_id),
+	select bul.corpus_id, avg(bbb)::bigint as time_between_bypass from cycle_table_pre_res left join building bul on bul.id = building_id left join corpus on corpus.id = bul.corpus_id group by  bul.corpus_id),
 pre_compose_corpus_set as (
 	select building_list.corpus_id, building_list.corpus_name, avg_rank, time_bypasses, count_bypass, time_between_bypass from building_list left join temp_req on temp_req.id = building_list.corpus_id left join cycle_table_final on temp_req.id = cycle_table_final.corpus_id),
 output_avg_rank_building as (

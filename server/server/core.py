@@ -27,7 +27,7 @@ class Server:
         super().__init__()
         self.clients = []
         self.database = MainDataBase()
-        self.red = redis.Redis(host='192.168.1.8')
+        self.red = redis.Redis(host='192.168.1.9')
         self.path_img = ''
         self.address = listen_address
         self.port = listen_port
